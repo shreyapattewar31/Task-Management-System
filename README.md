@@ -58,7 +58,7 @@ task_management/
 
 ```
 git clone https://github.com/shreyapattewar31/Task-Management-System
-cd task_management
+cd Task-Management-System
 ```
 
 
