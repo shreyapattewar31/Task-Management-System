@@ -57,11 +57,10 @@ task_management/
 ### 1. Clone the repository
 
 ```
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/shreyapattewar31/Task-Management-System
 cd task_management
 ```
 
-Replace `<YOUR_GITHUB_REPOSITORY_URL>` with the actual repository URL.
 
 ### 2. Configure and start the backend
 
