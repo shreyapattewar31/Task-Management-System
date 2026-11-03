@@ -16,8 +16,15 @@ const taskSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Pending", "In Progress", "Done"],
+      enum: ["Pending", "In Progress", "Done", "On Hold"],
       default: "Pending",
+    },
+
+    // User who owns this task
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
   },
   {

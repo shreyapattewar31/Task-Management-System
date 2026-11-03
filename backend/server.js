@@ -5,30 +5,40 @@ const cors = require("cors");
 require("dotenv").config();
 
 const Task = require("./models/Task");
+const authRoutes = require("./routes/authRoutes");
+const adminRoutes = require("./routes/adminroutes");
+const { protect } = require("./middleware/auth");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
+app.use(express.urlencoded({ extended: true }));
+//authenticate routes
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 // Test route
 app.get("/", (req, res) => {
   res.send("Task Management API is running");
 });
 
-// Get all tasks
-app.get("/api/tasks", async (req, res) => {
+// Get tasks belonging to the logged-in user
+app.get("/api/tasks", protect, async (req, res) => {
   try {
-    const tasks = await Task.find().sort({ createdAt: -1 });
+    const tasks = await Task.find({
+      userId: req.user.userId,
+    }).sort({ createdAt: -1 });
+
     res.status(200).json(tasks);
   } catch (error) {
+    console.error("Fetch tasks error:", error);
     res.status(500).json({ message: "Failed to fetch tasks" });
   }
 });
 
-// Create a task
-app.post("/api/tasks", async (req, res) => {
+// Create a task for the logged-in user
+app.post("/api/tasks", protect, async (req, res) => {
   try {
     const { title, description, status } = req.body;
 
@@ -39,48 +49,65 @@ app.post("/api/tasks", async (req, res) => {
     }
 
     const newTask = await Task.create({
-      title,
+      title: title.trim(),
       description,
       status,
+      userId: req.user.userId,
     });
 
     res.status(201).json(newTask);
   } catch (error) {
+    console.error("Create task error:", error);
     res.status(500).json({ message: "Failed to create task" });
   }
 });
-// update a task
-app.put("/api/tasks/:id", async (req, res) => {
+
+// Update only a task owned by the logged-in user
+app.put("/api/tasks/:id", protect, async (req, res) => {
   try {
     const { title, description, status } = req.body;
 
-    const updatedTask = await Task.findByIdAndUpdate(
-      req.params.id,
+    const updatedTask = await Task.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        userId: req.user.userId,
+      },
       { title, description, status },
       { new: true, runValidators: true }
     );
 
     if (!updatedTask) {
-      return res.status(404).json({ message: "Task not found" });
+      return res.status(404).json({
+        message: "Task not found",
+      });
     }
 
     res.status(200).json(updatedTask);
   } catch (error) {
+    console.error("Update task error:", error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// delete a task
-app.delete("/api/tasks/:id", async (req, res) => {
+// Delete only a task owned by the logged-in user
+app.delete("/api/tasks/:id", protect, async (req, res) => {
   try {
-    const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    const deletedTask = await Task.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
 
     if (!deletedTask) {
-      return res.status(404).json({ message: "Task not found" });
+      return res.status(404).json({
+        message: "Task not found",
+      });
     }
 
-    res.status(200).json({ message: "Task deleted successfully" });
+    res.status(200).json({
+      message: "Task deleted successfully",
+    });
   } catch (error) {
+    console.error("Delete task error:", error);
     res.status(500).json({ message: error.message });
   }
 });

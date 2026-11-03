@@ -1,54 +1,161 @@
-
+import AdminDashboard from "./AdminDashboard";
 import { useEffect, useState } from "react";
 import "./App.css";
 
-function App() {
-  const [tasks, setTasks] = useState([]);
+const API_URL = "http://localhost:5000/api";
 
-  // Add task form states
+function App() {
+  // Authentication state
+  const [token, setToken] = useState(
+    () => localStorage.getItem("token") || ""
+  );
+
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem("user");
+
+    try {
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [authMode, setAuthMode] = useState("login");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+
+  // Task state
+  const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("Pending");
 
-  // Edit task form states
+  // Edit task state
   const [editingTask, setEditingTask] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editStatus, setEditStatus] = useState("Pending");
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
-  // Fetch tasks from backend
-  
-  const fetchTasks = async () => {
+  // Authentication: Signup or Login
+  const handleAuth = async (event) => {
+    event.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+
+    const endpoint =
+      authMode === "signup" ? "/auth/signup" : "/auth/login";
+
+    const requestBody =
+      authMode === "signup"
+        ? {
+            name: authName.trim(),
+            email: authEmail.trim(),
+            password: authPassword,
+          }
+        : {
+            email: authEmail.trim(),
+            password: authPassword,
+          };
+
     try {
-      setFetchError("");
-
-      const response = await fetch("http://localhost:5000/api/tasks");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch tasks");
-      }
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Authentication failed");
+      }
+
+      // Signup response may not contain a token.
+      // After signup, switch to Login.
+      if (authMode === "signup") {
+        setAuthMode("login");
+        setAuthName("");
+        setAuthPassword("");
+        setAuthError("Account created successfully. Please log in.");
+        return;
+      }
+
+      // Login response contains token and user.
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      setToken(data.token);
+      setUser(data.user);
+      setAuthPassword("");
+    } catch (error) {
+      setAuthError(error.message || "Could not connect to the backend.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Logout
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    setToken("");
+    setUser(null);
+    setTasks([]);
+    setEditingTask(null);
+    setFetchError("");
+  };
+
+  // Fetch tasks using JWT token
+  const fetchTasks = async () => {
+    if (!token) return;
+
+    setLoading(true);
+    setFetchError("");
+
+    try {
+      const response = await fetch(`${API_URL}/tasks`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.status === 401 || response.status === 403) {
+        handleLogout();
+        throw new Error("Your session has expired. Please log in again.");
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch tasks");
+      }
+
       setTasks(data);
     } catch (error) {
-      console.error("Error fetching tasks:", error);
-      setFetchError(
-        "Could not load tasks. Please check your backend connection and try again."
-      );
+      console.error("Fetch tasks error:", error);
+      setFetchError(error.message || "Could not load tasks.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch tasks when the page loads
+  // Load tasks after login
   useEffect(() => {
+    if (token && user?.role === "User") {
     fetchTasks();
-  }, []);
+    }
+  }, [token, user]);
 
-  // Create a new task
+  // Create task
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -58,10 +165,11 @@ function App() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/api/tasks", {
+      const response = await fetch(`${API_URL}/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           title: title.trim(),
@@ -70,8 +178,10 @@ function App() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to create task");
+        throw new Error(data.message || "Failed to create task");
       }
 
       setTitle("");
@@ -80,12 +190,12 @@ function App() {
 
       await fetchTasks();
     } catch (error) {
-      console.error("Error creating task:", error);
-      alert("Could not create task. Please check the backend.");
+      console.error("Create task error:", error);
+      alert(error.message || "Could not create task.");
     }
   };
 
-  // Open the edit form
+  // Open edit form
   const handleEdit = (task) => {
     setEditingTask(task);
     setEditTitle(task.title);
@@ -93,7 +203,7 @@ function App() {
     setEditStatus(task.status);
   };
 
-  // Update an existing task
+  // Update task
   const handleUpdate = async (event) => {
     event.preventDefault();
 
@@ -104,11 +214,12 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/tasks/${editingTask._id}`,
+        `${API_URL}/tasks/${editingTask._id}`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             title: editTitle.trim(),
@@ -118,54 +229,156 @@ function App() {
         }
       );
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to update task");
+        throw new Error(data.message || "Failed to update task");
       }
 
       setEditingTask(null);
       await fetchTasks();
     } catch (error) {
-      console.error("Error updating task:", error);
-      alert("Could not update task.");
+      console.error("Update task error:", error);
+      alert(error.message || "Could not update task.");
     }
   };
-   
-  // Delete a task
+
+  // Delete task
   const handleDelete = async (taskId) => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this task?"
     );
 
-    if (!confirmDelete) {
-      return;
-    }
+    if (!confirmDelete) return;
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/tasks/${taskId}`,
-        {
-          method: "DELETE",
-        }
-      );
+      const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error("Failed to delete task");
+        throw new Error(data.message || "Failed to delete task");
       }
 
       await fetchTasks();
     } catch (error) {
-      console.error("Error deleting task:", error);
-      alert("Could not delete task.");
+      console.error("Delete task error:", error);
+      alert(error.message || "Could not delete task.");
     }
   };
-  // Cancel editing
+
   const handleCancelEdit = () => {
     setEditingTask(null);
   };
 
+  // Signup/Login screen
+  if (!token || !user) {
+    return (
+      <div className="app">
+        <h1>Task Management System</h1>
+
+        <div className="auth-container">
+          <h2>
+            {authMode === "login" ? "Login" : "Create Account"}
+          </h2>
+
+          <form onSubmit={handleAuth}>
+            {authMode === "signup" && (
+              <>
+                <label>Name *</label>
+                <input
+                  type="text"
+                  placeholder="Enter your name"
+                  value={authName}
+                  onChange={(event) => setAuthName(event.target.value)}
+                  required
+                />
+              </>
+            )}
+
+            <label>Email *</label>
+            <input
+              type="email"
+              placeholder="Enter your email"
+              value={authEmail}
+              onChange={(event) => setAuthEmail(event.target.value)}
+              required
+            />
+
+            <label>Password *</label>
+            <input
+              type="password"
+              placeholder="Enter your password"
+              value={authPassword}
+              onChange={(event) => setAuthPassword(event.target.value)}
+              required
+            />
+
+            {authError && (
+              <p className="auth-message" role="alert">
+                {authError}
+              </p>
+            )}
+
+            <button type="submit" disabled={authLoading}>
+              {authLoading
+                ? "Please wait..."
+                : authMode === "login"
+                ? "Login"
+                : "Sign Up"}
+            </button>
+          </form>
+
+          <p>
+            {authMode === "login"
+              ? "Don't have an account? "
+              : "Already have an account? "}
+
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setAuthMode(
+                  authMode === "login" ? "signup" : "login"
+                );
+                setAuthError("");
+              }}
+            >
+              {authMode === "login" ? "Sign Up" : "Login"}
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (user.role === "Admin") {
+  return (
+    <AdminDashboard
+      token={token}
+      onLogout={handleLogout}
+    />
+  );
+}
+
+  // User task dashboard
   return (
     <div className="app">
-      <h1>Task Management System</h1>
+      <div className="dashboard-header">
+        <div>
+          <h1>Task Management System</h1>
+          <p>Welcome, {user.name}</p>
+          <p>Role: {user.role}</p>
+        </div>
+
+        <button type="button" onClick={handleLogout}>
+          Logout
+        </button>
+      </div>
 
       {/* Create Task Form */}
       <form onSubmit={handleSubmit}>
@@ -241,24 +454,23 @@ function App() {
       <h2>Tasks</h2>
 
       {loading ? (
-          <p>Loading tasks...</p>
-        ) : fetchError ? (
-          <div>
-            <p role="alert">{fetchError}</p>
-            <button type="button" onClick={fetchTasks}>
-              Retry
-            </button>
-          </div>
-        ) : tasks.length === 0 ? (
-          <p>No tasks found. Add your first task!</p>
-        ) : (
+        <p>Loading tasks...</p>
+      ) : fetchError ? (
+        <div>
+          <p role="alert">{fetchError}</p>
+          <button type="button" onClick={fetchTasks}>
+            Retry
+          </button>
+        </div>
+      ) : tasks.length === 0 ? (
+        <p>No tasks found. Add your first task!</p>
+      ) : (
         <ul>
           {tasks.map((task) => (
             <li key={task._id}>
               <strong>{task.title}</strong>
 
               <p>{task.description || "No description provided"}</p>
-
               <p>Status: {task.status}</p>
 
               <p>
@@ -268,11 +480,8 @@ function App() {
                   : "Date unavailable"}
               </p>
 
-              <button
-                type="button"
-                 onClick={() => handleEdit(task)}
-              >
-              Edit
+              <button type="button" onClick={() => handleEdit(task)}>
+                Edit
               </button>
 
               <button
