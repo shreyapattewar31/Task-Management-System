@@ -49,11 +49,14 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 
 // Get tasks belonging to the logged-in user
+// Get tasks belonging to the logged-in user
 app.get("/api/tasks", protect, async (req, res) => {
   try {
     const tasks = await Task.find({
       userId: req.user.userId,
-    }).sort({ createdAt: -1 });
+    })
+      .populate("assignedBy", "name email")
+      .sort({ createdAt: -1 });
 
     res.status(200).json(tasks);
   } catch (error) {

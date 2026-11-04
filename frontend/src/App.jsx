@@ -445,6 +445,18 @@ function App() {
               <strong>{task.title}</strong>
 
               <p>{task.description || "No description provided"}</p>
+
+              <p>
+                {task.assignedBy?.name ? (
+                  <>
+                    <strong>Assigned by Admin:</strong>{" "}
+                    {task.assignedBy.name}
+                  </>
+                ) : (
+                  <strong>Created by Me</strong>
+                )}
+              </p>
+
               <p>Status: {task.status}</p>
 
               <p>
