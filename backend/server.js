@@ -8,26 +8,44 @@ const Task = require("./models/Task");
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminroutes");
 const { protect } = require("./middleware/auth");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// CORS configuration
+const allowedOrigins = [
+  "https://task-management-system-roan-one.vercel.app",
+];
+
 const corsOptions = {
-  origin: "https://task-management-system-roan-one.vercel.app",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  origin: function (origin, callback) {
+    // Allow requests without an Origin header (e.g. server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
 };
 
+// Apply CORS before routes
 app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-//authenticate routes
-app.use("/api/auth", authRoutes);
-app.use("/api/admin", adminRoutes);
+
 // Test route
 app.get("/", (req, res) => {
-  res.send("Task Management API is running");
+  res.status(200).send("Task Management API is running");
 });
+
+// Authentication and admin routes
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Get tasks belonging to the logged-in user
 app.get("/api/tasks", protect, async (req, res) => {
@@ -117,17 +135,17 @@ app.delete("/api/tasks/:id", protect, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-// Connect to MongoDB
+
+// Connect to MongoDB and start the server
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB connected successfully");
 
     app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
   })
   .catch((error) => {
     console.error("MongoDB connection failed:", error.message);
   });
-
