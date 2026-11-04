@@ -1,3 +1,4 @@
+
 .app {
   max-width: 700px;
   margin: 40px auto;
@@ -48,6 +49,7 @@ li {
   border: 1px solid #ddd;
   border-radius: 5px;
 }
+
 li button {
   margin-right: 10px;
 }
@@ -83,7 +85,6 @@ li button {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 18px;
   color: #555;
 }
 

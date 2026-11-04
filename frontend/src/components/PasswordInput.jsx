@@ -1,4 +1,6 @@
+
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 function PasswordInput({
   value,
@@ -27,8 +29,10 @@ function PasswordInput({
         aria-label={showPassword ? "Hide password" : "Show password"}
         aria-pressed={showPassword}
       >
-        {showPassword ? "🙈" : "👁"}
+        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
       </button>
+
+      
     </div>
   );
 }
