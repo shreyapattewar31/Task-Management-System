@@ -20,11 +20,29 @@ const taskSchema = new mongoose.Schema(
       default: "Pending",
     },
 
-    // User who owns this task
+    // User receiving the task
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+    },
+
+    // Admin who assigned the task
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    priority: {
+      type: String,
+      enum: ["Low", "Medium", "High"],
+      default: "Medium",
+    },
+
+    dueDate: {
+      type: Date,
+      default: null,
     },
   },
   {

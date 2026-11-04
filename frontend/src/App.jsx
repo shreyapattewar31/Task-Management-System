@@ -1,4 +1,7 @@
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import AdminDashboard from "./AdminDashboard";
+
 import { useEffect, useState } from "react";
 import "./App.css";
 
@@ -281,82 +284,49 @@ function App() {
   };
 
   // Signup/Login screen
+  // Login / Signup screen
   if (!token || !user) {
+    const handleSwitchToSignup = () => {
+      setAuthMode("signup");
+      setAuthError("");
+      setAuthPassword("");
+    };
+
+    const handleSwitchToLogin = () => {
+      setAuthMode("login");
+      setAuthError("");
+      setAuthPassword("");
+    };
+
     return (
       <div className="app">
         <h1>Task Management System</h1>
 
-        <div className="auth-container">
-          <h2>
-            {authMode === "login" ? "Login" : "Create Account"}
-          </h2>
-
-          <form onSubmit={handleAuth}>
-            {authMode === "signup" && (
-              <>
-                <label>Name *</label>
-                <input
-                  type="text"
-                  placeholder="Enter your name"
-                  value={authName}
-                  onChange={(event) => setAuthName(event.target.value)}
-                  required
-                />
-              </>
-            )}
-
-            <label>Email *</label>
-            <input
-              type="email"
-              placeholder="Enter your email"
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-              required
-            />
-
-            <label>Password *</label>
-            <input
-              type="password"
-              placeholder="Enter your password"
-              value={authPassword}
-              onChange={(event) => setAuthPassword(event.target.value)}
-              required
-            />
-
-            {authError && (
-              <p className="auth-message" role="alert">
-                {authError}
-              </p>
-            )}
-
-            <button type="submit" disabled={authLoading}>
-              {authLoading
-                ? "Please wait..."
-                : authMode === "login"
-                ? "Login"
-                : "Sign Up"}
-            </button>
-          </form>
-
-          <p>
-            {authMode === "login"
-              ? "Don't have an account? "
-              : "Already have an account? "}
-
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => {
-                setAuthMode(
-                  authMode === "login" ? "signup" : "login"
-                );
-                setAuthError("");
-              }}
-            >
-              {authMode === "login" ? "Sign Up" : "Login"}
-            </button>
-          </p>
-        </div>
+        {authMode === "login" ? (
+          <Login
+            email={authEmail}
+            setEmail={setAuthEmail}
+            password={authPassword}
+            setPassword={setAuthPassword}
+            onSubmit={handleAuth}
+            loading={authLoading}
+            error={authError}
+            onSwitchToSignup={handleSwitchToSignup}
+          />
+        ) : (
+          <Signup
+            name={authName}
+            setName={setAuthName}
+            email={authEmail}
+            setEmail={setAuthEmail}
+            password={authPassword}
+            setPassword={setAuthPassword}
+            onSubmit={handleAuth}
+            loading={authLoading}
+            error={authError}
+            onSwitchToLogin={handleSwitchToLogin}
+          />
+        )}
       </div>
     );
   }

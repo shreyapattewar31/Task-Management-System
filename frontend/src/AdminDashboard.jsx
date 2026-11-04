@@ -1,68 +1,160 @@
-import { useEffect, useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import "./AdminDashboard.css";
 
-// Local development fallback. On Vercel, VITE_API_URL should be set
-// to your deployed backend API URL, ending in /api.
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const initialForm = {
+  title: "",
+  description: "",
+  userId: "",
+  priority: "Medium",
+  dueDate: "",
+};
 
 function AdminDashboard({ token, onLogout }) {
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    const fetchAdminData = async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const [form, setForm] = useState(initialForm);
+  const [assigning, setAssigning] = useState(false);
 
-        const headers = {
-          Authorization: `Bearer ${token}`,
-        };
-
-        const [usersResponse, tasksResponse] = await Promise.all([
-          fetch(`${API_URL}/admin/users`, { headers }),
-          fetch(`${API_URL}/admin/tasks`, { headers }),
-        ]);
-
-        if (
-          usersResponse.status === 401 ||
-          tasksResponse.status === 401
-        ) {
-          throw new Error("Session expired. Please log in again.");
-        }
-
-        if (
-          usersResponse.status === 403 ||
-          tasksResponse.status === 403
-        ) {
-          throw new Error("Access denied. Admin privileges are required.");
-        }
-
-        if (!usersResponse.ok || !tasksResponse.ok) {
-          throw new Error("Could not load Admin dashboard data.");
-        }
-
-        const usersData = await usersResponse.json();
-        const tasksData = await tasksResponse.json();
-
-        setUsers(usersData);
-        setTasks(tasksData);
-      } catch (err) {
-        setError(err.message || "Something went wrong.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (token) {
-      fetchAdminData();
-    } else {
+  // Fetch dashboard data
+  const fetchAdminData = useCallback(async () => {
+    if (!token) {
       setError("No authentication token found. Please log in again.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+
+      const [usersResponse, tasksResponse] = await Promise.all([
+        fetch(`${API_URL}/admin/users`, { headers }),
+        fetch(`${API_URL}/admin/tasks`, { headers }),
+      ]);
+
+      if (
+        usersResponse.status === 401 ||
+        tasksResponse.status === 401
+      ) {
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      if (
+        usersResponse.status === 403 ||
+        tasksResponse.status === 403
+      ) {
+        throw new Error("Admin privileges are required.");
+      }
+
+      if (!usersResponse.ok || !tasksResponse.ok) {
+        throw new Error("Could not load dashboard data.");
+      }
+
+      const usersData = await usersResponse.json();
+      const tasksData = await tasksResponse.json();
+
+      setUsers(usersData);
+      setTasks(tasksData);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    } finally {
       setLoading(false);
     }
   }, [token]);
+
+  useEffect(() => {
+    fetchAdminData();
+  }, [fetchAdminData]);
+
+  // Handle form input changes
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  // Assign task to selected user
+  
+  // Assign task to selected user
+  const handleAssignTask = async (event) => {
+    event.preventDefault();
+
+    setFormError("");
+    setSuccess("");
+
+    if (!form.title.trim()) {
+      setFormError("Task title is required.");
+      return;
+    }
+
+    if (!form.userId) {
+      setFormError("Please select a user.");
+      return;
+    }
+
+    try {
+      setAssigning(true);
+
+      const response = await fetch(`${API_URL}/admin/assign-task`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          description: form.description.trim(),
+          userId: form.userId,
+          priority: form.priority,
+          dueDate: form.dueDate || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to assign task.");
+      }
+
+      // Show task assignment and email status
+      if (data.emailSent) {
+        setSuccess(
+          "Task assigned successfully. Email notification sent."
+        );
+      } else {
+        setSuccess(
+          "Task assigned successfully, but the email notification could not be sent."
+        );
+      }
+
+      // Reset form after successful assignment
+      setForm(initialForm);
+
+      // Refresh users and tasks in the dashboard
+      await fetchAdminData();
+    } catch (err) {
+      setFormError(err.message || "Failed to assign task.");
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const getUser = (userId) => {
     const id =
@@ -74,10 +166,18 @@ function AdminDashboard({ token, onLogout }) {
   };
 
   const getUserName = (userId) => {
+    if (typeof userId === "object" && userId !== null) {
+      return userId.name || "Unknown user";
+    }
+
     return getUser(userId)?.name || "Unknown user";
   };
 
   const getUserEmail = (userId) => {
+    if (typeof userId === "object" && userId !== null) {
+      return userId.email || "Unknown email";
+    }
+
     return getUser(userId)?.email || "Unknown email";
   };
 
@@ -90,7 +190,8 @@ function AdminDashboard({ token, onLogout }) {
   ).length;
 
   const inProgressTasks = tasks.filter(
-    (task) => task.status === "In Progress").length;
+    (task) => task.status === "In Progress"
+  ).length;
 
   const formatDate = (date) => {
     if (!date) return "—";
@@ -117,12 +218,20 @@ function AdminDashboard({ token, onLogout }) {
         <div className="admin-error">
           <h2>Unable to load dashboard</h2>
           <p role="alert">{error}</p>
+
           <button
             className="admin-logout-button"
             type="button"
             onClick={onLogout}
           >
             Logout
+          </button>
+
+          <button
+            type="button"
+            onClick={fetchAdminData}
+          >
+            Retry
           </button>
         </div>
       </div>
@@ -131,11 +240,18 @@ function AdminDashboard({ token, onLogout }) {
 
   return (
     <main className="admin-dashboard">
+      {/* Dashboard Header */}
       <header className="admin-header">
         <div>
-          <span className="admin-eyebrow">ADMINISTRATION</span>
+          <span className="admin-eyebrow">
+            ADMINISTRATION
+          </span>
+
           <h1>Admin Dashboard</h1>
-          <p>Monitor users and tasks across your system.</p>
+
+          <p>
+            Monitor users and manage tasks across your system.
+          </p>
         </div>
 
         <button
@@ -147,7 +263,11 @@ function AdminDashboard({ token, onLogout }) {
         </button>
       </header>
 
-      <section className="admin-summary" aria-label="Dashboard statistics">
+      {/* Dashboard Statistics */}
+      <section
+        className="admin-summary"
+        aria-label="Dashboard statistics"
+      >
         <article className="admin-stat-card">
           <div className="admin-stat-icon users-icon">U</div>
           <div>
@@ -179,6 +299,7 @@ function AdminDashboard({ token, onLogout }) {
             <h2>{pendingTasks}</h2>
           </div>
         </article>
+
         <article className="admin-stat-card">
           <div className="admin-stat-icon progress-icon">↻</div>
           <div>
@@ -188,13 +309,162 @@ function AdminDashboard({ token, onLogout }) {
         </article>
       </section>
 
+      {/* Assign Task Form */}
+      <section className="admin-panel">
+        <div className="admin-panel-header">
+          <div>
+            <h2>Assign a Task</h2>
+            <p>
+              Create a task and assign it to a registered user.
+            </p>
+          </div>
+        </div>
+
+        <form
+          className="admin-assignment-form"
+          onSubmit={handleAssignTask}
+        >
+          <div className="admin-form-grid">
+            <div className="admin-form-group">
+              <label htmlFor="task-title">
+                Task Title *
+              </label>
+
+              <input
+                id="task-title"
+                name="title"
+                type="text"
+                value={form.title}
+                onChange={handleChange}
+                placeholder="Enter task title"
+                required
+                maxLength={150}
+              />
+            </div>
+
+            <div className="admin-form-group">
+              <label htmlFor="assign-user">
+                Assign To *
+              </label>
+
+              <select
+                id="assign-user"
+                name="userId"
+                value={form.userId}
+                onChange={handleChange}
+                required
+              >
+                <option value="">
+                  Select a user
+                </option>
+
+                {users
+                  .filter((user) => user.role === "User")
+                  .map((user) => (
+                    <option
+                      key={user._id}
+                      value={user._id}
+                    >
+                      {user.name} ({user.email})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="admin-form-group">
+              <label htmlFor="task-priority">
+                Priority
+              </label>
+
+              <select
+                id="task-priority"
+                name="priority"
+                value={form.priority}
+                onChange={handleChange}
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+
+            <div className="admin-form-group">
+              <label htmlFor="task-due-date">
+                Due Date
+              </label>
+
+              <input
+                id="task-due-date"
+                name="dueDate"
+                type="date"
+                value={form.dueDate}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="admin-form-group admin-form-full">
+              <label htmlFor="task-description">
+                Description
+              </label>
+
+              <textarea
+                id="task-description"
+                name="description"
+                value={form.description}
+                onChange={handleChange}
+                placeholder="Enter task description"
+                rows={4}
+                maxLength={2000}
+              />
+            </div>
+          </div>
+
+          {formError && (
+            <p className="admin-form-error" role="alert">
+              {formError}
+            </p>
+          )}
+
+          {success && (
+            <p
+              className="admin-form-success"
+              role="status"
+            >
+              {success}
+            </p>
+          )}
+
+          <button
+            className="admin-assign-button"
+            type="submit"
+            disabled={assigning || users.length === 0}
+          >
+            {assigning
+              ? "Assigning Task..."
+              : "Assign Task"}
+          </button>
+
+          {users.length === 0 && (
+            <p className="admin-form-error">
+              No registered users are available.
+            </p>
+          )}
+        </form>
+      </section>
+
+      {/* Registered Users */}
       <section className="admin-panel">
         <div className="admin-panel-header">
           <div>
             <h2>Registered Users</h2>
-            <p>Users who have accounts in the system</p>
+            <p>
+              Users who have accounts in the system.
+            </p>
           </div>
-          <span className="admin-count">{users.length} users</span>
+
+          <span className="admin-count">
+            {users.length} users
+          </span>
         </div>
 
         {users.length === 0 ? (
@@ -218,8 +488,12 @@ function AdminDashboard({ token, onLogout }) {
               <tbody>
                 {users.map((user) => (
                   <tr key={user._id}>
-                    <td className="admin-name-cell">{user.name}</td>
+                    <td className="admin-name-cell">
+                      {user.name}
+                    </td>
+
                     <td>{user.email}</td>
+
                     <td>
                       <span
                         className={`admin-role-badge ${
@@ -231,6 +505,7 @@ function AdminDashboard({ token, onLogout }) {
                         {user.role}
                       </span>
                     </td>
+
                     <td>{formatDate(user.createdAt)}</td>
                   </tr>
                 ))}
@@ -240,14 +515,19 @@ function AdminDashboard({ token, onLogout }) {
         )}
       </section>
 
+      {/* All Tasks */}
       <section className="admin-panel">
         <div className="admin-panel-header">
           <div>
             <h2>All Tasks</h2>
-            <p>Tasks created by users across the system</p>
+            <p>
+              Tasks created by users and assigned by admins.
+            </p>
           </div>
+
           <span className="admin-count">
-            {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+            {tasks.length}{" "}
+            {tasks.length === 1 ? "task" : "tasks"}
           </span>
         </div>
 
@@ -255,7 +535,7 @@ function AdminDashboard({ token, onLogout }) {
           <div className="admin-empty-state">
             <div className="admin-empty-icon">T</div>
             <h3>No tasks yet</h3>
-            <p>Tasks created by users will appear here.</p>
+            <p>Assigned and created tasks will appear here.</p>
           </div>
         ) : (
           <div className="admin-table-wrapper">
@@ -263,9 +543,11 @@ function AdminDashboard({ token, onLogout }) {
               <thead>
                 <tr>
                   <th>Task</th>
-                  <th>Owner</th>
+                  <th>Assigned User</th>
                   <th>Email</th>
+                  <th>Priority</th>
                   <th>Status</th>
+                  <th>Due Date</th>
                   <th>Created</th>
                 </tr>
               </thead>
@@ -273,13 +555,28 @@ function AdminDashboard({ token, onLogout }) {
               <tbody>
                 {tasks.map((task) => (
                   <tr key={task._id}>
-                    <td className="admin-name-cell">{task.title}</td>
+                    <td className="admin-name-cell">
+                      {task.title}
+                    </td>
+
                     <td>{getUserName(task.userId)}</td>
+
                     <td>{getUserEmail(task.userId)}</td>
+
+                    <td>
+                      <span
+                        className={`admin-priority-badge priority-${(
+                          task.priority || "Medium"
+                        ).toLowerCase()}`}
+                      >
+                        {task.priority || "Medium"}
+                      </span>
+                    </td>
+
                     <td>
                       <span
                         className={`admin-status-badge status-${(
-                          task.status || "pending"
+                          task.status || "Pending"
                         )
                           .toLowerCase()
                           .replace(/\s+/g, "-")}`}
@@ -287,6 +584,9 @@ function AdminDashboard({ token, onLogout }) {
                         {task.status || "Pending"}
                       </span>
                     </td>
+
+                    <td>{formatDate(task.dueDate)}</td>
+
                     <td>{formatDate(task.createdAt)}</td>
                   </tr>
                 ))}

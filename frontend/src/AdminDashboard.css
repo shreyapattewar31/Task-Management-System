@@ -46,7 +46,7 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s;
 }
 
 .admin-logout-button:hover {
@@ -352,4 +352,264 @@
 .progress-icon {
   background: #f3e8ff;
   color: #7e22ce;
+}
+
+
+/* Admin task assignment form */
+
+.admin-assignment-form {
+  padding: 24px;
+}
+
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.admin-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-form-group label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.admin-form-group input,
+.admin-form-group select,
+.admin-form-group textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.admin-form-group input:focus,
+.admin-form-group select:focus,
+.admin-form-group textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.admin-form-group textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.admin-form-full {
+  grid-column: 1 / -1;
+}
+
+.admin-assign-button {
+  margin-top: 22px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.admin-assign-button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.admin-assign-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-form-error {
+  margin-top: 14px;
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.admin-form-success {
+  margin-top: 14px;
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-priority-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.priority-low {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.priority-medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.priority-high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Mobile responsive layout */
+
+@media (max-width: 768px) {
+  .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-form-full {
+    grid-column: auto;
+  }
+
+  .admin-assignment-form {
+    padding: 16px;
+  }
+
+  .admin-assign-button {
+    width: 100%;
+  }
+
+  .admin-panel-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-form-group input,
+  .admin-form-group select,
+  .admin-form-group textarea {
+    font-size: 16px;
+  }
+}
+
+/* Additional mobile layout improvements */
+
+.admin-dashboard,
+.admin-dashboard * {
+  box-sizing: border-box;
+}
+
+.admin-dashboard {
+  min-width: 0;
+}
+
+.admin-panel {
+  min-width: 0;
+}
+
+.admin-table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-table {
+  min-width: 600px;
+}
+
+.admin-assignment-form {
+  min-width: 0;
+}
+
+.admin-form-grid {
+  min-width: 0;
+}
+
+.admin-form-group {
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .admin-dashboard {
+    padding: 20px 12px;
+  }
+
+  .admin-header {
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  .admin-header p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .admin-logout-button {
+    width: 100%;
+  }
+
+  .admin-panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .admin-assignment-form {
+    padding: 16px;
+  }
+
+  .admin-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .admin-form-full {
+    grid-column: auto;
+  }
+
+  .admin-assign-button {
+    width: 100%;
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-dashboard {
+    padding: 16px 10px;
+  }
+
+  .admin-stat-card {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .admin-stat-card h2 {
+    font-size: 26px;
+  }
+
+  .admin-stat-icon {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .admin-panel-header h2 {
+    font-size: 16px;
+  }
 }
