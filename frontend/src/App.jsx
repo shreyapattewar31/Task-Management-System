@@ -445,7 +445,12 @@ function App() {
               <strong>{task.title}</strong>
 
               <p>{task.description || "No description provided"}</p>
-
+              <p>
+                <strong>Due Date:</strong>{" "}
+                {task.dueDate
+                  ? new Date(task.dueDate).toLocaleDateString()
+                  : "No due date"}
+              </p>
               <p>
                 {task.assignedBy?.name ? (
                   <>
