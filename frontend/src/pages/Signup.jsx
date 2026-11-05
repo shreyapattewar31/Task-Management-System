@@ -13,57 +13,59 @@ function Signup({
   onSwitchToLogin,
 }) {
   return (
-    <div className="auth-container">
-      <h2>Create Account</h2>
-
-      <form onSubmit={onSubmit}>
-        <label>Name *</label>
+    <form onSubmit={onSubmit} className="auth-form">
+      <div className="auth-field">
+        <label htmlFor="signup-name" className="auth-label">Full Name</label>
         <input
+          id="signup-name"
           type="text"
-          placeholder="Enter your name"
+          className="auth-input"
+          placeholder="John Doe"
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(e) => setName(e.target.value)}
           required
         />
+      </div>
 
-        <label>Email *</label>
+      <div className="auth-field">
+        <label htmlFor="signup-email" className="auth-label">Email</label>
         <input
+          id="signup-email"
           type="email"
-          placeholder="Enter your email"
+          className="auth-input"
+          placeholder="you@example.com"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           required
         />
+      </div>
 
-        <label>Password *</label>
+      <div className="auth-field">
+        <label htmlFor="signup-password" className="auth-label">Password</label>
         <PasswordInput
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="Create a password"
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="At least 6 characters"
         />
+      </div>
 
-        {error && (
-          <p className="auth-message" role="alert">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p className={`auth-msg ${error.startsWith("Account created") ? "auth-msg--success" : "auth-msg--error"}`} role="alert">
+          {error}
+        </p>
+      )}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Please wait..." : "Sign Up"}
-        </button>
-      </form>
+      <button type="submit" className="auth-btn" disabled={loading}>
+        {loading ? "Creating account…" : "Create Account"}
+      </button>
 
-      <p>
+      <p className="auth-switch">
         Already have an account?{" "}
-        <button
-          type="button"
-          className="link-button"
-          onClick={onSwitchToLogin}
-        >
-          Login
+        <button type="button" className="link-button" onClick={onSwitchToLogin}>
+          Sign in
         </button>
       </p>
-    </div>
+    </form>
   );
 }
 

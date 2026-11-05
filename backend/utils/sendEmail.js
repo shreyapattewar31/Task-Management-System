@@ -78,4 +78,53 @@ async function sendTaskAssignedEmail({
   });
 }
 
-module.exports = { sendTaskAssignedEmail };
+async function sendPasswordResetEmail({ to, userName, resetUrl }) {
+  if (!process.env.SMTP_EMAIL || !process.env.SMTP_APP_PASSWORD) {
+    throw new Error("SMTP credentials are missing from the environment.");
+  }
+
+  const safeName = escapeHtml(userName || "there");
+  const safeUrl = escapeHtml(resetUrl);
+
+  return transporter.sendMail({
+    from: `"Task Management System" <${process.env.SMTP_EMAIL}>`,
+    to,
+    subject: "Reset your password",
+    text: [
+      `Hello ${userName || "there"},`,
+      "",
+      "You requested a password reset for your Task Management System account.",
+      "",
+      `Reset your password using this link (valid for 1 hour):`,
+      resetUrl,
+      "",
+      "If you did not request this, you can safely ignore this email.",
+    ].join("\n"),
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; color: #222;">
+        <h2 style="color: #2563eb;">Reset your password</h2>
+        <p>Hello ${safeName},</p>
+        <p>You requested a password reset for your Task Management System account.</p>
+        <p>Click the button below to reset your password. This link is valid for <strong>1 hour</strong>.</p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${safeUrl}"
+             style="display: inline-block; padding: 14px 28px; background: #2563eb; color: #fff;
+                    text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            Reset Password
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 13px;">
+          If the button doesn't work, copy and paste this URL into your browser:<br/>
+          <a href="${safeUrl}" style="color: #2563eb;">${safeUrl}</a>
+        </p>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+          If you did not request this, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+  });
+}
+
+module.exports = { sendTaskAssignedEmail, sendPasswordResetEmail };

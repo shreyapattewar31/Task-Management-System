@@ -48,17 +48,50 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 
-// Get tasks belonging to the logged-in user
-// Get tasks belonging to the logged-in user
+// Get tasks belonging to the logged-in user (with search / filter / sort / pagination)
 app.get("/api/tasks", protect, async (req, res) => {
   try {
-    const tasks = await Task.find({
-      userId: req.user.userId,
-    })
-      .populate("assignedBy", "name email")
-      .sort({ createdAt: -1 });
+    const {
+      search = "",
+      status = "",
+      priority = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      page = 1,
+      limit = 10,
+    } = req.query;
 
-    res.status(200).json(tasks);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = { userId: req.user.userId };
+
+    if (search.trim()) {
+      query.title = new RegExp(search.trim(), "i");
+    }
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+
+    const allowedSort = ["createdAt", "dueDate", "priority", "status", "title"];
+    const sortField = allowedSort.includes(sortBy) ? sortBy : "createdAt";
+    const sortDir = sortOrder === "asc" ? 1 : -1;
+
+    const [tasks, total] = await Promise.all([
+      Task.find(query)
+        .populate("assignedBy", "name email")
+        .sort({ [sortField]: sortDir })
+        .skip(skip)
+        .limit(limitNum),
+      Task.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      tasks,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
   } catch (error) {
     console.error("Fetch tasks error:", error);
     res.status(500).json({ message: "Failed to fetch tasks" });

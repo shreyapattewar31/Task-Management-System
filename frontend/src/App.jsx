@@ -1,8 +1,11 @@
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import AdminDashboard from "./AdminDashboard";
+import UserProfile from "./pages/UserProfile";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 
 const API_URL =
@@ -11,479 +14,774 @@ const API_URL =
     ? "http://localhost:5000/api"
     : "https://task-management-system-v5mx.onrender.com/api");
 
+const ITEMS_PER_PAGE = 6;
+
+const STATUS_OPTIONS = ["Pending", "In Progress", "Done", "On Hold"];
+const PRIORITY_OPTIONS = ["Low", "Medium", "High"];
+
+const initialTaskForm = { title: "", description: "", status: "Pending", priority: "Medium", dueDate: "" };
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  const map = {
+    Pending: "badge--pending",
+    "In Progress": "badge--progress",
+    Done: "badge--done",
+    "On Hold": "badge--hold",
+  };
+  return <span className={`badge ${map[status] || "badge--pending"}`}>{status}</span>;
+}
+
+function PriorityBadge({ priority }) {
+  const map = {
+    Low: "badge--low",
+    Medium: "badge--medium",
+    High: "badge--high",
+  };
+  return <span className={`badge ${map[priority] || "badge--medium"}`}>{priority}</span>;
+}
+
+function formatDate(d) {
+  if (!d) return null;
+  return new Date(d).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function isOverdue(dueDate, status) {
+  if (!dueDate || status === "Done") return false;
+  return new Date(dueDate) < new Date();
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
-  // Authentication state
-  const [token, setToken] = useState(
-    () => localStorage.getItem("token") || ""
-  );
-
+  // ── auth state ──────────────────────────────────────────────────────────────
+  const [token, setToken] = useState(() => localStorage.getItem("token") || "");
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("user");
-
-    try {
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
   });
 
-  const [authMode, setAuthMode] = useState("login");
+  // route: "login" | "signup" | "forgot" | "reset/<token>"
+  const [route, setRoute] = useState(() => {
+    // Detect /reset-password/<token> on initial load (e.g. from email link)
+    const match = window.location.pathname.match(/^\/reset-password\/(.+)$/);
+    return match ? `reset/${match[1]}` : "login";
+  });
+
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Task state
+  // ── task state ───────────────────────────────────────────────────────────────
   const [tasks, setTasks] = useState([]);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState("Pending");
-
-  // Edit task state
-  const [editingTask, setEditingTask] = useState(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editStatus, setEditStatus] = useState("Pending");
-
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
-  // Authentication: Signup or Login
+  // ── filter / sort / page ─────────────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterPriority, setFilterPriority] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [page, setPage] = useState(1);
+
+  const searchTimer = useRef(null);
+
+  // ── task form state ──────────────────────────────────────────────────────────
+  const [showForm, setShowForm] = useState(false);
+  const [taskForm, setTaskForm] = useState(initialTaskForm);
+  const [formError, setFormError] = useState("");
+  const [formSaving, setFormSaving] = useState(false);
+
+  // ── edit state ───────────────────────────────────────────────────────────────
+  const [editingTask, setEditingTask] = useState(null);
+
+  // ── profile modal ────────────────────────────────────────────────────────────
+  const [showProfile, setShowProfile] = useState(false);
+
+  // ── detect reset-password route from URL ────────────────────────────────────
+  // Initialise from URL synchronously so no useEffect is needed
+  // (useState lazy initializer runs once before first render)
+  // route is already seeded in the useState call above via window.location
+
+  // ── auth ─────────────────────────────────────────────────────────────────────
   const handleAuth = async (event) => {
     event.preventDefault();
     setAuthError("");
     setAuthLoading(true);
 
-    const endpoint =
-      authMode === "signup" ? "/auth/signup" : "/auth/login";
-
-    const requestBody =
-      authMode === "signup"
-        ? {
-            name: authName.trim(),
-            email: authEmail.trim(),
-            password: authPassword,
-          }
-        : {
-            email: authEmail.trim(),
-            password: authPassword,
-          };
+    const isSignup = route === "signup";
+    const endpoint = isSignup ? "/auth/signup" : "/auth/login";
+    const body = isSignup
+      ? { name: authName.trim(), email: authEmail.trim(), password: authPassword }
+      : { email: authEmail.trim(), password: authPassword };
 
     try {
-      const response = await fetch(`${API_URL}${endpoint}`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Authentication failed");
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Authentication failed");
-      }
-
-      // Signup response may not contain a token.
-      // After signup, switch to Login.
-      if (authMode === "signup") {
-        setAuthMode("login");
+      if (isSignup) {
+        setRoute("login");
         setAuthName("");
         setAuthPassword("");
-        setAuthError("Account created successfully. Please log in.");
+        setAuthError("Account created! Please log in.");
         return;
       }
 
-      // Login response contains token and user.
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
-
       setToken(data.token);
       setUser(data.user);
       setAuthPassword("");
-    } catch (error) {
-      setAuthError(error.message || "Could not connect to the backend.");
+    } catch (err) {
+      setAuthError(err.message || "Could not connect to the server.");
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Logout
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-
     setToken("");
     setUser(null);
     setTasks([]);
     setEditingTask(null);
     setFetchError("");
+    setRoute("login");
   };
 
-  // Fetch tasks using JWT token
-  const fetchTasks = async () => {
+  // ── fetch tasks ───────────────────────────────────────────────────────────────
+  const fetchTasks = useCallback(async (opts = {}) => {
     if (!token) return;
-
     setLoading(true);
     setFetchError("");
 
+    const params = new URLSearchParams({
+      search: opts.search ?? search,
+      status: opts.status ?? filterStatus,
+      priority: opts.priority ?? filterPriority,
+      sortBy: opts.sortBy ?? sortBy,
+      sortOrder: opts.sortOrder ?? sortOrder,
+      page: String(opts.page ?? page),
+      limit: String(ITEMS_PER_PAGE),
+    });
+
     try {
-      const response = await fetch(`${API_URL}/tasks`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await fetch(`${API_URL}/tasks?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
+      const data = await res.json();
 
-      const data = await response.json();
-
-      if (response.status === 401 || response.status === 403) {
+      if (res.status === 401 || res.status === 403) {
         handleLogout();
-        throw new Error("Your session has expired. Please log in again.");
+        return;
       }
+      if (!res.ok) throw new Error(data.message || "Failed to fetch tasks");
 
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to fetch tasks");
-      }
-
-      setTasks(data);
-    } catch (error) {
-      console.error("Fetch tasks error:", error);
-      setFetchError(error.message || "Could not load tasks.");
+      setTasks(data.tasks || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
+    } catch (err) {
+      setFetchError(err.message || "Could not load tasks.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, search, filterStatus, filterPriority, sortBy, sortOrder, page]);
 
-  // Load tasks after login
+
   useEffect(() => {
     if (token && user?.role === "User") {
-    fetchTasks();
+      (async () => { await fetchTasks(); })();
     }
-  }, [token, user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, user?.role]);
 
-  // Create task
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  // ── search debounce ───────────────────────────────────────────────────────────
+  const handleSearchChange = (val) => {
+    setSearch(val);
+    setPage(1);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      fetchTasks({ search: val, page: 1 });
+    }, 400);
+  };
 
-    if (!title.trim()) {
-      alert("Please enter a task title");
+  const handleFilterChange = (key, val) => {
+    const next = { search, status: filterStatus, priority: filterPriority, sortBy, sortOrder, page: 1 };
+    next[key] = val;
+    if (key === "status") setFilterStatus(val);
+    if (key === "priority") setFilterPriority(val);
+    if (key === "sortBy") setSortBy(val);
+    if (key === "sortOrder") setSortOrder(val);
+    setPage(1);
+    fetchTasks({ ...next, page: 1 });
+  };
+
+  // ── task CRUD ─────────────────────────────────────────────────────────────────
+  const handleTaskFormChange = (e) => {
+    const { name, value } = e.target;
+    setTaskForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const openCreateForm = () => {
+    setEditingTask(null);
+    setTaskForm(initialTaskForm);
+    setFormError("");
+    setShowForm(true);
+  };
+
+  const openEditForm = (task) => {
+    setEditingTask(task);
+    setTaskForm({
+      title: task.title,
+      description: task.description || "",
+      status: task.status,
+      priority: task.priority || "Medium",
+      dueDate: task.dueDate ? task.dueDate.slice(0, 10) : "",
+    });
+    setFormError("");
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingTask(null);
+  };
+
+  const handleSaveTask = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!taskForm.title.trim()) {
+      setFormError("Task title is required");
       return;
     }
 
+    setFormSaving(true);
     try {
-      const response = await fetch(`${API_URL}/tasks`, {
-        method: "POST",
+      const url = editingTask
+        ? `${API_URL}/tasks/${editingTask._id}`
+        : `${API_URL}/tasks`;
+      const method = editingTask ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          title: title.trim(),
-          description,
-          status,
+          title: taskForm.title.trim(),
+          description: taskForm.description,
+          status: taskForm.status,
+          priority: taskForm.priority,
+          dueDate: taskForm.dueDate || null,
         }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to save task");
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to create task");
-      }
-
-      setTitle("");
-      setDescription("");
-      setStatus("Pending");
-
-      await fetchTasks();
-    } catch (error) {
-      console.error("Create task error:", error);
-      alert(error.message || "Could not create task.");
+      closeForm();
+      fetchTasks();
+    } catch (err) {
+      setFormError(err.message || "Could not save task");
+    } finally {
+      setFormSaving(false);
     }
   };
 
-  // Open edit form
-  const handleEdit = (task) => {
-    setEditingTask(task);
-    setEditTitle(task.title);
-    setEditDescription(task.description || "");
-    setEditStatus(task.status);
-  };
-
-  // Update task
-  const handleUpdate = async (event) => {
-    event.preventDefault();
-
-    if (!editTitle.trim()) {
-      alert("Please enter a task title");
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `${API_URL}/tasks/${editingTask._id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            title: editTitle.trim(),
-            description: editDescription,
-            status: editStatus,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to update task");
-      }
-
-      setEditingTask(null);
-      await fetchTasks();
-    } catch (error) {
-      console.error("Update task error:", error);
-      alert(error.message || "Could not update task.");
-    }
-  };
-
-  // Delete task
   const handleDelete = async (taskId) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this task?"
-    );
-
-    if (!confirmDelete) return;
-
+    if (!window.confirm("Delete this task? This cannot be undone.")) return;
     try {
-      const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+      const res = await fetch(`${API_URL}/tasks/${taskId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to delete task");
-      }
-
-      await fetchTasks();
-    } catch (error) {
-      console.error("Delete task error:", error);
-      alert(error.message || "Could not delete task.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to delete task");
+      fetchTasks();
+    } catch (err) {
+      alert(err.message || "Could not delete task");
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingTask(null);
+  // ── user update from profile modal ───────────────────────────────────────────
+  const handleUserUpdate = (updatedUser) => {
+    const merged = { ...user, ...updatedUser };
+    setUser(merged);
+    localStorage.setItem("user", JSON.stringify(merged));
   };
 
-  // Signup/Login screen
-  // Login / Signup screen
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  RENDER: auth screen
+  // ═══════════════════════════════════════════════════════════════════════════
   if (!token || !user) {
-    const handleSwitchToSignup = () => {
-      setAuthMode("signup");
-      setAuthError("");
-      setAuthPassword("");
-    };
+    const resetMatch = route.match(/^reset\/(.+)$/);
 
-    const handleSwitchToLogin = () => {
-      setAuthMode("login");
-      setAuthError("");
-      setAuthPassword("");
-    };
+    if (resetMatch) {
+      return (
+        <div className="auth-page">
+          <div className="auth-brand">
+            <span className="auth-brand-icon">✓</span> Task Management System
+          </div>
+          <ResetPassword
+            token={resetMatch[1]}
+            onSuccess={() => {
+              window.history.pushState({}, "", "/");
+              setRoute("login");
+            }}
+          />
+        </div>
+      );
+    }
+
+    if (route === "forgot") {
+      return (
+        <div className="auth-page">
+          <div className="auth-brand">
+            <span className="auth-brand-icon">✓</span> Task Management System
+          </div>
+          <ForgotPassword onBack={() => setRoute("login")} />
+        </div>
+      );
+    }
 
     return (
-      <div className="app">
-        <h1>Task Management System</h1>
+      <div className="auth-page">
+        <div className="auth-brand">
+          <span className="auth-brand-icon">✓</span> Task Management System
+        </div>
 
-        {authMode === "login" ? (
-          <Login
-            email={authEmail}
-            setEmail={setAuthEmail}
-            password={authPassword}
-            setPassword={setAuthPassword}
-            onSubmit={handleAuth}
-            loading={authLoading}
-            error={authError}
-            onSwitchToSignup={handleSwitchToSignup}
-          />
+        {route === "login" ? (
+          <div className="auth-card">
+            <h2 className="auth-title">Welcome back</h2>
+            <p className="auth-subtitle">Sign in to your account</p>
+
+            <Login
+              email={authEmail}
+              setEmail={setAuthEmail}
+              password={authPassword}
+              setPassword={setAuthPassword}
+              onSubmit={handleAuth}
+              loading={authLoading}
+              error={authError}
+              onSwitchToSignup={() => { setRoute("signup"); setAuthError(""); setAuthPassword(""); }}
+              onForgotPassword={() => { setRoute("forgot"); setAuthError(""); }}
+            />
+          </div>
         ) : (
-          <Signup
-            name={authName}
-            setName={setAuthName}
-            email={authEmail}
-            setEmail={setAuthEmail}
-            password={authPassword}
-            setPassword={setAuthPassword}
-            onSubmit={handleAuth}
-            loading={authLoading}
-            error={authError}
-            onSwitchToLogin={handleSwitchToLogin}
-          />
+          <div className="auth-card">
+            <h2 className="auth-title">Create account</h2>
+            <p className="auth-subtitle">Join Task Management System today</p>
+
+            <Signup
+              name={authName}
+              setName={setAuthName}
+              email={authEmail}
+              setEmail={setAuthEmail}
+              password={authPassword}
+              setPassword={setAuthPassword}
+              onSubmit={handleAuth}
+              loading={authLoading}
+              error={authError}
+              onSwitchToLogin={() => { setRoute("login"); setAuthError(""); setAuthPassword(""); }}
+            />
+          </div>
         )}
       </div>
     );
   }
-  if (user.role === "Admin") {
-  return (
-    <AdminDashboard
-      token={token}
-      onLogout={handleLogout}
-    />
-  );
-}
 
-  // User task dashboard
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  RENDER: admin dashboard
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (user.role === "Admin") {
+    return (
+      <AdminDashboard
+        token={token}
+        user={user}
+        onLogout={handleLogout}
+        onUserUpdate={handleUserUpdate}
+      />
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  RENDER: user task dashboard
+  // ═══════════════════════════════════════════════════════════════════════════
+  const overdueCount = tasks.filter(
+    (t) => isOverdue(t.dueDate, t.status)
+  ).length;
+
   return (
-    <div className="app">
-      <div className="dashboard-header">
-        <div>
-          <h1>Task Management System</h1>
-          <p>Welcome, {user.name}</p>
-          <p>Role: {user.role}</p>
+    <div className="ud-root">
+      {/* ── Topbar ── */}
+      <header className="ud-topbar">
+        <div className="ud-topbar-brand">
+          <span className="ud-brand-icon">✓</span>
+          <span className="ud-brand-name">Task Management System</span>
+        </div>
+        <div className="ud-topbar-right">
+          <button
+            className="ud-avatar-btn"
+            onClick={() => setShowProfile(true)}
+            title="My Profile"
+          >
+            <span className="ud-avatar">{(user.name || "U")[0].toUpperCase()}</span>
+            <span className="ud-username">{user.name}</span>
+          </button>
+          <button className="ud-logout-btn" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+      </header>
+
+      {/* ── Main ── */}
+      <main className="ud-main">
+        {/* Page header */}
+        <div className="ud-page-header">
+          <div>
+            <h1 className="ud-page-title">My Tasks</h1>
+            <p className="ud-page-sub">
+              {total} task{total !== 1 ? "s" : ""}
+              {overdueCount > 0 && (
+                <span className="ud-overdue-badge"> · {overdueCount} overdue</span>
+              )}
+            </p>
+          </div>
+          <button className="ud-create-btn" onClick={openCreateForm}>
+            + New Task
+          </button>
         </div>
 
-        <button type="button" onClick={handleLogout}>
-          Logout
-        </button>
-      </div>
-
-      {/* Create Task Form */}
-      <form onSubmit={handleSubmit}>
-        <h2>Add New Task</h2>
-
-        <label>Task Title *</label>
-        <input
-          type="text"
-          placeholder="Enter task title"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          required
-        />
-
-        <label>Description</label>
-        <textarea
-          placeholder="Enter task description"
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-        />
-
-        <label>Status</label>
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
-          <option value="Pending">Pending</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Done">Done</option>
-        </select>
-
-        <button type="submit">Add Task</button>
-      </form>
-
-      {/* Edit Task Form */}
-      {editingTask && (
-        <form onSubmit={handleUpdate}>
-          <h2>Edit Task</h2>
-
-          <label>Task Title *</label>
+        {/* Filters bar */}
+        <div className="ud-filters">
           <input
-            type="text"
-            value={editTitle}
-            onChange={(event) => setEditTitle(event.target.value)}
-            required
+            className="ud-search"
+            type="search"
+            placeholder="Search tasks…"
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
           />
 
-          <label>Description</label>
-          <textarea
-            value={editDescription}
-            onChange={(event) => setEditDescription(event.target.value)}
-          />
-
-          <label>Status</label>
           <select
-            value={editStatus}
-            onChange={(event) => setEditStatus(event.target.value)}
+            className="ud-filter-select"
+            value={filterStatus}
+            onChange={(e) => handleFilterChange("status", e.target.value)}
           >
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Done">Done</option>
+            <option value="">All Statuses</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
 
-          <button type="submit">Save Changes</button>
+          <select
+            className="ud-filter-select"
+            value={filterPriority}
+            onChange={(e) => handleFilterChange("priority", e.target.value)}
+          >
+            <option value="">All Priorities</option>
+            {PRIORITY_OPTIONS.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
 
-          <button type="button" onClick={handleCancelEdit}>
-            Cancel
-          </button>
-        </form>
+          <select
+            className="ud-filter-select"
+            value={`${sortBy}:${sortOrder}`}
+            onChange={(e) => {
+              const [sb, so] = e.target.value.split(":");
+              setSortBy(sb);
+              setSortOrder(so);
+              handleFilterChange("sortBy", sb);
+              setSortOrder(so);
+              fetchTasks({ sortBy: sb, sortOrder: so, page: 1 });
+            }}
+          >
+            <option value="createdAt:desc">Newest first</option>
+            <option value="createdAt:asc">Oldest first</option>
+            <option value="dueDate:asc">Due date (soon)</option>
+            <option value="dueDate:desc">Due date (late)</option>
+            <option value="priority:desc">Priority (high→low)</option>
+            <option value="priority:asc">Priority (low→high)</option>
+            <option value="title:asc">Title A→Z</option>
+            <option value="title:desc">Title Z→A</option>
+          </select>
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="ud-center-state">
+            <div className="ud-spinner" />
+            <p>Loading tasks…</p>
+          </div>
+        ) : fetchError ? (
+          <div className="ud-center-state">
+            <p className="ud-error-text" role="alert">{fetchError}</p>
+            <button className="ud-retry-btn" onClick={() => fetchTasks()}>
+              Retry
+            </button>
+          </div>
+        ) : tasks.length === 0 ? (
+          <div className="ud-center-state">
+            <div className="ud-empty-icon">📋</div>
+            <h3 className="ud-empty-title">
+              {search || filterStatus || filterPriority
+                ? "No tasks match your filters"
+                : "No tasks yet"}
+            </h3>
+            <p className="ud-empty-sub">
+              {search || filterStatus || filterPriority
+                ? "Try adjusting your search or filters."
+                : "Create your first task to get started."}
+            </p>
+            {!search && !filterStatus && !filterPriority && (
+              <button className="ud-create-btn" onClick={openCreateForm}>
+                + New Task
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="ud-task-grid">
+              {tasks.map((task) => {
+                const overdue = isOverdue(task.dueDate, task.status);
+                return (
+                  <article key={task._id} className={`ud-task-card ${overdue ? "ud-task-card--overdue" : ""}`}>
+                    <div className="ud-task-card-top">
+                      <div className="ud-task-badges">
+                        <StatusBadge status={task.status} />
+                        <PriorityBadge priority={task.priority || "Medium"} />
+                        {overdue && <span className="badge badge--overdue">Overdue</span>}
+                      </div>
+                      <div className="ud-task-actions">
+                        <button
+                          className="ud-icon-btn ud-icon-btn--edit"
+                          onClick={() => openEditForm(task)}
+                          title="Edit task"
+                          aria-label="Edit task"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="ud-icon-btn ud-icon-btn--delete"
+                          onClick={() => handleDelete(task._id)}
+                          title="Delete task"
+                          aria-label="Delete task"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+
+                    <h3 className="ud-task-title">{task.title}</h3>
+
+                    {task.description && (
+                      <p className="ud-task-desc">{task.description}</p>
+                    )}
+
+                    <div className="ud-task-meta">
+                      {task.dueDate && (
+                        <span className={`ud-meta-item ${overdue ? "ud-meta-item--overdue" : ""}`}>
+                          📅 Due {formatDate(task.dueDate)}
+                        </span>
+                      )}
+                      {task.assignedBy?.name && (
+                        <span className="ud-meta-item">
+                          👤 Assigned by {task.assignedBy.name}
+                        </span>
+                      )}
+                      <span className="ud-meta-item ud-meta-item--muted">
+                        Created {formatDate(task.createdAt)}
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="ud-pagination">
+                <button
+                  className="ud-page-btn"
+                  disabled={page <= 1}
+                  onClick={() => {
+                    const p = page - 1;
+                    setPage(p);
+                    fetchTasks({ page: p });
+                  }}
+                >
+                  ← Prev
+                </button>
+
+                <div className="ud-page-numbers">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(
+                      (n) =>
+                        n === 1 ||
+                        n === totalPages ||
+                        Math.abs(n - page) <= 1
+                    )
+                    .reduce((acc, n, idx, arr) => {
+                      if (idx > 0 && n - arr[idx - 1] > 1) acc.push("…");
+                      acc.push(n);
+                      return acc;
+                    }, [])
+                    .map((n, i) =>
+                      n === "…" ? (
+                        <span key={`ellipsis-${i}`} className="ud-page-ellipsis">…</span>
+                      ) : (
+                        <button
+                          key={n}
+                          className={`ud-page-btn ud-page-btn--num ${n === page ? "ud-page-btn--active" : ""}`}
+                          onClick={() => { setPage(n); fetchTasks({ page: n }); }}
+                        >
+                          {n}
+                        </button>
+                      )
+                    )}
+                </div>
+
+                <button
+                  className="ud-page-btn"
+                  disabled={page >= totalPages}
+                  onClick={() => {
+                    const p = page + 1;
+                    setPage(p);
+                    fetchTasks({ page: p });
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+
+      {/* ── Task Form Modal ── */}
+      {showForm && (
+        <div className="modal-overlay" onClick={closeForm}>
+          <div
+            className="modal-box"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label={editingTask ? "Edit task" : "New task"}
+          >
+            <div className="modal-header">
+              <h2 className="modal-title">
+                {editingTask ? "Edit Task" : "New Task"}
+              </h2>
+              <button className="modal-close" onClick={closeForm} aria-label="Close">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveTask} className="modal-form">
+              <div className="modal-field">
+                <label className="modal-label">Task Title *</label>
+                <input
+                  className="modal-input"
+                  name="title"
+                  type="text"
+                  placeholder="Enter task title"
+                  value={taskForm.title}
+                  onChange={handleTaskFormChange}
+                  maxLength={150}
+                  required
+                />
+              </div>
+
+              <div className="modal-field">
+                <label className="modal-label">Description</label>
+                <textarea
+                  className="modal-input modal-textarea"
+                  name="description"
+                  placeholder="Optional description"
+                  value={taskForm.description}
+                  onChange={handleTaskFormChange}
+                  rows={3}
+                  maxLength={2000}
+                />
+              </div>
+
+              <div className="modal-row">
+                <div className="modal-field">
+                  <label className="modal-label">Status</label>
+                  <select
+                    className="modal-input"
+                    name="status"
+                    value={taskForm.status}
+                    onChange={handleTaskFormChange}
+                  >
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="modal-field">
+                  <label className="modal-label">Priority</label>
+                  <select
+                    className="modal-input"
+                    name="priority"
+                    value={taskForm.priority}
+                    onChange={handleTaskFormChange}
+                  >
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-field">
+                <label className="modal-label">Due Date</label>
+                <input
+                  className="modal-input"
+                  name="dueDate"
+                  type="date"
+                  value={taskForm.dueDate}
+                  onChange={handleTaskFormChange}
+                />
+              </div>
+
+              {formError && (
+                <p className="modal-error" role="alert">{formError}</p>
+              )}
+
+              <div className="modal-actions">
+                <button type="button" className="modal-btn modal-btn--cancel" onClick={closeForm}>
+                  Cancel
+                </button>
+                <button type="submit" className="modal-btn modal-btn--save" disabled={formSaving}>
+                  {formSaving ? "Saving…" : editingTask ? "Save Changes" : "Create Task"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
-      {/* Task List */}
-      <h2>Tasks</h2>
-
-      {loading ? (
-        <p>Loading tasks...</p>
-      ) : fetchError ? (
-        <div>
-          <p role="alert">{fetchError}</p>
-          <button type="button" onClick={fetchTasks}>
-            Retry
-          </button>
-        </div>
-      ) : tasks.length === 0 ? (
-        <p>No tasks found. Add your first task!</p>
-      ) : (
-        <ul>
-          {tasks.map((task) => (
-            <li key={task._id}>
-              <strong>{task.title}</strong>
-
-              <p>{task.description || "No description provided"}</p>
-              <p>
-                <strong>Due Date:</strong>{" "}
-                {task.dueDate
-                  ? new Date(task.dueDate).toLocaleDateString()
-                  : "No due date"}
-              </p>
-              <p>
-                {task.assignedBy?.name ? (
-                  <>
-                    <strong>Assigned by Admin:</strong>{" "}
-                    {task.assignedBy.name}
-                  </>
-                ) : (
-                  <strong>Created by Me</strong>
-                )}
-              </p>
-
-              <p>Status: {task.status}</p>
-
-              <p>
-                Created Date:{" "}
-                {task.createdAt
-                  ? new Date(task.createdAt).toLocaleDateString()
-                  : "Date unavailable"}
-              </p>
-
-              <button type="button" onClick={() => handleEdit(task)}>
-                Edit
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDelete(task._id)}
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
+      {/* ── Profile Modal ── */}
+      {showProfile && (
+        <UserProfile
+          user={user}
+          token={token}
+          onClose={() => setShowProfile(false)}
+          onUserUpdate={handleUserUpdate}
+        />
       )}
     </div>
   );

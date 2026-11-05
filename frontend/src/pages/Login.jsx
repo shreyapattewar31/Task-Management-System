@@ -9,50 +9,58 @@ function Login({
   loading,
   error,
   onSwitchToSignup,
+  onForgotPassword,
 }) {
   return (
-    <div className="auth-container">
-      <h2>Login</h2>
-
-      <form onSubmit={onSubmit}>
-        <label>Email *</label>
+    <form onSubmit={onSubmit} className="auth-form">
+      <div className="auth-field">
+        <label htmlFor="login-email" className="auth-label">Email</label>
         <input
+          id="login-email"
           type="email"
-          placeholder="Enter your email"
+          className="auth-input"
+          placeholder="you@example.com"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           required
         />
+      </div>
 
-        <label>Password *</label>
+      <div className="auth-field">
+        <div className="auth-label-row">
+          <label htmlFor="login-password" className="auth-label">Password</label>
+          {onForgotPassword && (
+            <button
+              type="button"
+              className="link-button auth-forgot"
+              onClick={onForgotPassword}
+            >
+              Forgot password?
+            </button>
+          )}
+        </div>
         <PasswordInput
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Enter your password"
         />
+      </div>
 
-        {error && (
-          <p className="auth-message" role="alert">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p className="auth-msg auth-msg--error" role="alert">{error}</p>
+      )}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Please wait..." : "Login"}
-        </button>
-      </form>
+      <button type="submit" className="auth-btn" disabled={loading}>
+        {loading ? "Signing in…" : "Sign In"}
+      </button>
 
-      <p>
+      <p className="auth-switch">
         Don't have an account?{" "}
-        <button
-          type="button"
-          className="link-button"
-          onClick={onSwitchToSignup}
-        >
-          Sign Up
+        <button type="button" className="link-button" onClick={onSwitchToSignup}>
+          Create account
         </button>
       </p>
-    </div>
+    </form>
   );
 }
 
