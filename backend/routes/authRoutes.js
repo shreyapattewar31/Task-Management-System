@@ -210,10 +210,19 @@ router.post("/reset-password/:token", async (req, res) => {
       });
     }
 
-    user.password = await bcrypt.hash(password, 10);
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    await user.save();
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Use findByIdAndUpdate with explicit $set/$unset to guarantee
+    // the new password is persisted and reset fields are cleared.
+    // Avoids validator/save issues with undefined fields.
+    await User.findByIdAndUpdate(
+      user._id,
+      {
+        $set: { password: hashedPassword },
+        $unset: { passwordResetToken: "", passwordResetExpires: "" },
+      },
+      { runValidators: false }
+    );
 
     res.status(200).json({ message: "Password reset successfully" });
   } catch (error) {
@@ -283,8 +292,13 @@ router.put("/change-password", protect, async (req, res) => {
       return res.status(401).json({ message: "Current password is incorrect" });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await User.findByIdAndUpdate(
+      user._id,
+      { $set: { password: hashedPassword } },
+      { runValidators: false }
+    );
 
     res.status(200).json({ message: "Password changed successfully" });
   } catch (error) {
