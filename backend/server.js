@@ -101,7 +101,7 @@ app.get("/api/tasks", protect, async (req, res) => {
 // Create a task for the logged-in user
 app.post("/api/tasks", protect, async (req, res) => {
   try {
-    const { title, description, status } = req.body;
+    const { title, description, status, priority, dueDate } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({
@@ -113,6 +113,8 @@ app.post("/api/tasks", protect, async (req, res) => {
       title: title.trim(),
       description,
       status,
+      priority,
+      dueDate: dueDate ? new Date(dueDate) : null,
       userId: req.user.userId,
     });
 
@@ -126,14 +128,20 @@ app.post("/api/tasks", protect, async (req, res) => {
 // Update only a task owned by the logged-in user
 app.put("/api/tasks/:id", protect, async (req, res) => {
   try {
-    const { title, description, status } = req.body;
+    const { title, description, status, priority, dueDate } = req.body;
 
     const updatedTask = await Task.findOneAndUpdate(
       {
         _id: req.params.id,
         userId: req.user.userId,
       },
-      { title, description, status },
+      {
+        title,
+        description,
+        status,
+        priority,
+        dueDate: dueDate ? new Date(dueDate) : null,
+      },
       { new: true, runValidators: true }
     );
 
