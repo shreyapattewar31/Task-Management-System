@@ -81,6 +81,9 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
   // ── active tab ───────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("overview"); // overview | assign | tasks | users
 
+  // ── sidebar ──────────────────────────────────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const userSearchTimer = useRef(null);
   const taskSearchTimer = useRef(null);
 
@@ -354,46 +357,67 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
 
   return (
     <div className="admin-root">
-      {/* ── Topbar ── */}
-      <header className="admin-topbar">
-        <div className="admin-brand">
+      {/* ── Sidebar ── */}
+      <aside className={`admin-sidebar ${sidebarOpen ? "admin-sidebar--open" : ""}`} aria-label="Admin navigation">
+        <div className="admin-sidebar-brand">
           <span className="admin-brand-icon">✓</span>
-          <span className="admin-brand-name">Task Management System</span>
+          <span className="admin-brand-name">Task Manager</span>
           <span className="admin-brand-tag">Admin</span>
         </div>
-        <div className="admin-topbar-right">
-          <button
-            className="admin-avatar-btn"
-            onClick={() => setShowProfile(true)}
-            title="My Profile"
-          >
+
+        <nav className="admin-sidebar-nav">
+          {[
+            { key: "overview", icon: "📊", label: "Overview" },
+            { key: "assign",   icon: "➕", label: "Assign Task" },
+            { key: "tasks",    icon: "📋", label: `Tasks (${tasksTotal})` },
+            { key: "users",    icon: "👥", label: `Users (${usersTotal})` },
+          ].map((item) => (
+            <button
+              key={item.key}
+              className={`admin-nav-item ${activeTab === item.key ? "admin-nav-item--active" : ""}`}
+              onClick={() => { setActiveTab(item.key); setSidebarOpen(false); }}
+            >
+              <span className="admin-nav-icon">{item.icon}</span>
+              <span className="admin-nav-label">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="admin-sidebar-footer">
+          <div className="admin-sidebar-user">
             <span className="admin-avatar">{(user?.name || "A")[0].toUpperCase()}</span>
-            <span className="admin-username">{user?.name}</span>
-          </button>
-          <button className="admin-logout-button" onClick={onLogout}>Logout</button>
+            <div className="admin-sidebar-user-info">
+              <span className="admin-sidebar-user-name">{user?.name}</span>
+              <span className="admin-sidebar-user-role">Admin</span>
+            </div>
+          </div>
+          <button className="admin-sidebar-logout" onClick={onLogout} title="Logout">⏻</button>
         </div>
-      </header>
+      </aside>
 
-      {/* ── Tab nav ── */}
-      <nav className="admin-tabs">
-        {[
-          { key: "overview", label: "Overview" },
-          { key: "assign",   label: "Assign Task" },
-          { key: "tasks",    label: `Tasks (${tasksTotal})` },
-          { key: "users",    label: `Users (${usersTotal})` },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            className={`admin-tab ${activeTab === tab.key ? "admin-tab--active" : ""}`}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && <div className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      <main className="admin-main">
+      {/* ── Main area ── */}
+      <div className="admin-layout">
+        {/* Mobile topbar */}
+        <header className="admin-topbar">
+          <button className="admin-hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
+          <div className="admin-topbar-brand">
+            <span className="admin-brand-icon">✓</span>
+            <span>Task Manager</span>
+            <span className="admin-brand-tag">Admin</span>
+          </div>
+          <div className="admin-topbar-right">
+            <button className="admin-avatar-btn" onClick={() => setShowProfile(true)} title="My Profile">
+              <span className="admin-avatar">{(user?.name || "A")[0].toUpperCase()}</span>
+              <span className="admin-username">{user?.name}</span>
+            </button>
+            <button className="admin-logout-button" onClick={onLogout}>Logout</button>
+          </div>
+        </header>
 
+        <main className="admin-main">
         {/* ══ OVERVIEW ══════════════════════════════════════════════════════════ */}
         {activeTab === "overview" && (
           <div className="admin-overview">
@@ -686,7 +710,9 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
             )}
           </div>
         )}
-      </main>
+
+      </main>{/* admin-main */}
+      </div>{/* admin-layout */}
 
       <footer className="admin-footer">Task Management System · Admin Panel</footer>
 
