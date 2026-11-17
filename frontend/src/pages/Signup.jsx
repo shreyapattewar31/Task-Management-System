@@ -1,52 +1,28 @@
 import PasswordInput from "../components/PasswordInput";
+import GoogleSignIn from "../components/GoogleSignIn";
 
 function Signup({
-  name,
-  setName,
-  email,
-  setEmail,
-  password,
-  setPassword,
-  onSubmit,
-  loading,
-  error,
-  onSwitchToLogin,
+  name, setName, email, setEmail, password, setPassword,
+  onSubmit, loading, error,
+  onSwitchToLogin, onGoogleSuccess, onGoogleError,
 }) {
   return (
     <form onSubmit={onSubmit} className="auth-form">
       <div className="auth-field">
         <label htmlFor="signup-name" className="auth-label">Full Name</label>
-        <input
-          id="signup-name"
-          type="text"
-          className="auth-input"
-          placeholder="John Doe"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
+        <input id="signup-name" type="text" className="auth-input" placeholder="John Doe"
+          value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
 
       <div className="auth-field">
         <label htmlFor="signup-email" className="auth-label">Email</label>
-        <input
-          id="signup-email"
-          type="email"
-          className="auth-input"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+        <input id="signup-email" type="email" className="auth-input" placeholder="you@example.com"
+          value={email} onChange={(e) => setEmail(e.target.value)} required />
       </div>
 
       <div className="auth-field">
         <label htmlFor="signup-password" className="auth-label">Password</label>
-        <PasswordInput
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 6 characters"
-        />
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
       </div>
 
       {error && (
@@ -59,11 +35,13 @@ function Signup({
         {loading ? "Creating account…" : "Create Account"}
       </button>
 
+      <div className="auth-divider"><span>or</span></div>
+
+      <GoogleSignIn onSuccess={onGoogleSuccess} onError={onGoogleError} />
+
       <p className="auth-switch">
         Already have an account?{" "}
-        <button type="button" className="link-button" onClick={onSwitchToLogin}>
-          Sign in
-        </button>
+        <button type="button" className="link-button" onClick={onSwitchToLogin}>Sign in</button>
       </p>
     </form>
   );

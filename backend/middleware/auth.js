@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/Users");
 
-const protect = (req, res, next) => {
+const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -11,12 +12,28 @@ const protect = (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // Fetch the user from DB on every request so deactivation takes effect
+    // immediately without waiting for the JWT to expire.
+    const user = await User.findById(decoded.userId).select("_id role isActive");
+
+    if (!user) {
+      return res.status(401).json({
+        message: "Account not found. Please log in again.",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        code: "ACCOUNT_DEACTIVATED",
+        message: "Your account has been deactivated. Please contact the admin.",
+      });
+    }
+
     req.user = {
-      userId: decoded.userId,
-      role: decoded.role,
+      userId: user._id,
+      role: user.role,
     };
 
     next();

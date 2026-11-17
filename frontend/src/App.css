@@ -149,21 +149,94 @@ a, button { -webkit-tap-highlight-color: transparent; }
 
 /* ─── Task grid ──────────────────────────────────────────────────────────── */
 .ud-task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 28px; }
-.ud-task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 10px; transition: box-shadow .2s; }
-.ud-task-card:hover { box-shadow: var(--shadow); }
-.ud-task-card--overdue { border-left: 3px solid var(--danger); }
+
+.ud-task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: box-shadow .2s, transform .15s;
+  position: relative;
+  overflow: hidden;
+}
+.ud-task-card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--border);
+  border-radius: 4px 0 0 4px;
+}
+.ud-task-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+
+/* Status-based left border accent */
+.ud-task-card--pending::before    { background: #f97316; }
+.ud-task-card--progress::before   { background: #3b82f6; }
+.ud-task-card--done::before       { background: #22c55e; }
+.ud-task-card--hold::before       { background: #a855f7; }
+.ud-task-card--overdue::before    { background: var(--danger); }
+
+/* Overdue — red tint */
+.ud-task-card--overdue {
+  background: #fff9f9;
+  border-color: #fecaca;
+}
+/* Done — green tint + muted text */
+.ud-task-card--done {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  opacity: .92;
+}
+/* On Hold — grey tint */
+.ud-task-card--hold {
+  background: #faf5ff;
+  border-color: #e9d5ff;
+}
+/* High priority glow */
+.ud-task-card--high-priority {
+  box-shadow: var(--shadow-sm), 0 0 0 1px #fecaca;
+}
+
 .ud-task-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .ud-task-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .ud-task-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .ud-icon-btn { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background .15s; }
 .ud-icon-btn:hover { background: var(--surface-2); }
 .ud-icon-btn--delete:hover { background: var(--danger-light); border-color: #fca5a5; }
-.ud-task-title { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.4; }
+
+.ud-task-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+}
+/* Strike-through for done tasks */
+.ud-task-card--done .ud-task-title { text-decoration: line-through; color: var(--text-2); }
+
 .ud-task-desc { font-size: 13px; color: var(--text-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
 .ud-task-meta { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; border-top: 1px solid var(--border); }
 .ud-meta-item { font-size: 12px; color: var(--text-2); }
-.ud-meta-item--overdue { color: var(--danger); font-weight: 600; }
+.ud-meta-item--overdue { color: var(--danger); font-weight: 700; }
 .ud-meta-item--muted { color: var(--text-3); }
+
+/* Overdue warning strip at bottom of card */
+.ud-task-card--overdue .ud-task-meta { border-top-color: #fecaca; }
+.ud-overdue-strip {
+  margin: 4px -18px -18px;
+  padding: 6px 18px;
+  background: var(--danger-light);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
 /* ─── Empty / loading / error ────────────────────────────────────────────── */
 .ud-center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 300px; text-align: center; }
@@ -236,7 +309,51 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .profile-msg--ok { background: var(--success-light); color: var(--success); }
 .profile-msg--err { background: var(--danger-light); color: var(--danger); }
 
-/* ─── Responsive ─────────────────────────────────────────────────────────── */
+/* ─── Deactivated account banner ─────────────────────────────────────────── */
+.auth-deactivated-banner {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--danger-light);
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius);
+  color: #991b1b;
+}
+.auth-deactivated-icon { font-size: 20px; flex-shrink: 0; }
+.auth-deactivated-banner strong { font-size: 14px; font-weight: 700; display: block; margin-bottom: 2px; }
+.auth-deactivated-banner p { font-size: 13px; color: #b91c1c; margin: 0; }
+
+/* ─── View toggle ────────────────────────────────────────────────────────── */
+.ud-header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.ud-view-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.ud-view-btn { width: 34px; height: 34px; border: none; background: var(--surface); color: var(--text-2); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
+.ud-view-btn:hover { background: var(--surface-2); color: var(--text); }
+.ud-view-btn--active { background: var(--brand); color: #fff; }
+
+/* ─── Table view ─────────────────────────────────────────────────────────── */
+.ud-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ud-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; text-align: left; }
+.ud-table th { padding: 12px 16px; background: var(--surface-2); color: var(--text-2); font-size: 11px; font-weight: 700; letter-spacing: .4px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.ud-table td { padding: 13px 16px; border-bottom: 1px solid #f1f5f9; color: var(--text-2); vertical-align: middle; }
+.ud-table tbody tr:last-child td { border-bottom: none; }
+.ud-table tbody tr:hover { background: #fafcff; }
+.ud-row--overdue { border-left: 2px solid var(--danger); }
+.ud-td-title { color: var(--text); font-weight: 600; }
+.ud-td-muted { color: var(--text-3); }
+.ud-td-overdue { color: var(--danger); font-weight: 600; }
+.ud-overdue-pill { display: inline-block; margin-left: 8px; padding: 1px 7px; background: var(--danger-light); color: var(--danger); border-radius: 10px; font-size: 10px; font-weight: 700; vertical-align: middle; }
+
+/* ─── Auth divider ───────────────────────────────────────────────────────── */
+.auth-divider { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 12px; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* ─── Google button ──────────────────────────────────────────────────────── */
+.google-btn-wrap { width: 100%; display: flex; justify-content: center; }
+.google-btn-wrap > div { width: 100% !important; }
+.google-btn-disabled { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-3); font-size: 13px; background: var(--surface-2); cursor: not-allowed; }
 @media (max-width: 768px) {
   /* Show topbar, hide sidebar by default */
   .ud-topbar { display: flex; }

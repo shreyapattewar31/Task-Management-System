@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import UserProfile from "./pages/UserProfile";
+import Reports from "./pages/Reports";
 import "./AdminDashboard.css";
 
 const API_URL =
@@ -371,6 +372,7 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
             { key: "assign",   icon: "➕", label: "Assign Task" },
             { key: "tasks",    icon: "📋", label: `Tasks (${tasksTotal})` },
             { key: "users",    icon: "👥", label: `Users (${usersTotal})` },
+            { key: "reports",  icon: "📈", label: "Reports" },
           ].map((item) => (
             <button
               key={item.key}
@@ -709,6 +711,11 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
               </>
             )}
           </div>
+        )}
+
+        {/* ══ REPORTS TAB ══════════════════════════════════════════════════════ */}
+        {activeTab === "reports" && (
+          <Reports token={token} role="Admin" />
         )}
 
       </main>{/* admin-main */}
