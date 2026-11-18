@@ -10,6 +10,7 @@ const adminRoutes = require("./routes/adminroutes");
 const googleAuthRoutes = require("./routes/googleAuthRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const swaggerSpec = require("./swagger");
+const { sendTaskCompletedWhatsApp } = require("./utils/sendWhatsApp");
 const { protect } = require("./middleware/auth");
 
 const app = express();
@@ -223,13 +224,50 @@ app.put("/api/tasks/:id", protect, async (req, res) => {
   try {
     const { title, description, status, priority, dueDate } = req.body;
 
-    const updatedTask = await Task.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.userId },
-      { title, description, status, priority, dueDate: dueDate ? new Date(dueDate) : null },
-      { new: true, runValidators: true }
-    );
+    // Fetch the task BEFORE updating so we can compare old vs new status
+    const existingTask = await Task.findOne({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
 
-    if (!updatedTask) return res.status(404).json({ message: "Task not found" });
+    if (!existingTask) return res.status(404).json({ message: "Task not found" });
+
+    const wasAlreadyDone = existingTask.status === "Done";
+    const isNowDone      = status === "Done";
+
+    // Apply the update
+    existingTask.title       = title       ?? existingTask.title;
+    existingTask.description = description ?? existingTask.description;
+    existingTask.status      = status      ?? existingTask.status;
+    existingTask.priority    = priority    ?? existingTask.priority;
+    existingTask.dueDate     = dueDate !== undefined
+      ? (dueDate ? new Date(dueDate) : null)
+      : existingTask.dueDate;
+
+    const updatedTask = await existingTask.save();
+
+    // Send WhatsApp only when transitioning INTO Done (not if it was already Done)
+    if (isNowDone && !wasAlreadyDone) {
+      // Fetch the user's name for the notification message
+      const User = require("./models/Users");
+      const taskUser = await User.findById(req.user.userId).select("name");
+
+      // Fire and forget — do NOT await, so the API response is instant
+      sendTaskCompletedWhatsApp({
+        userName:    taskUser?.name || "A user",
+        taskTitle:   updatedTask.title,
+        priority:    updatedTask.priority || "Medium",
+        completedAt: new Date(),
+      }).then((result) => {
+        if (result.sent) {
+          console.log(`WhatsApp notification sent for task "${updatedTask.title}" — msgId: ${result.messageId}`);
+        }
+      }).catch((err) => {
+        // Task is already saved — just log the WhatsApp failure
+        console.error(`WhatsApp notification failed for task "${updatedTask.title}":`, err.message);
+      });
+    }
+
     res.status(200).json(updatedTask);
   } catch (error) {
     console.error("Update task error:", error);
