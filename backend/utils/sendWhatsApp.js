@@ -1,18 +1,22 @@
 /**
- * Send a WhatsApp notification via Meta WhatsApp Cloud API.
+ * sendWhatsApp.js – Jalpi WhatsApp Business API integration
  *
- * Uses the pre-approved "task_completed_notify" template:
+ * Sends a WhatsApp notification via Jalpi when a task is marked Done.
  *
- *   ✅ Task Completed
- *   User: {{1}}
- *   Task: {{2}}
- *   Priority: {{3}}
- *   Completed at: {{4}}
+ * Required env vars (set on Render):
+ *   - JALPI_API_URL          – Base URL, e.g. https://api.jalpi.com/v1/whatsapp
+ *   - JALPI_ACCESS_TOKEN     – Bearer token for authentication
+ *   - JALPI_PHONE_NUMBER_ID  – The phone-number-id assigned by Jalpi
+ *   - JALPI_TEMPLATE_NAME    – Name of the approved template (e.g. task_completed_notify)
+ *   - ADMIN_WHATSAPP_NUMBER  – Destination number (E.164 without +)
+ *   - JALPI_LANGUAGE_CODE    – Optional language code, defaults to "en"
  */
 
-const GRAPH_API = "https://graph.facebook.com/v21.0";
+const fetch = require("node-fetch");
 
 /**
+ * Send a WhatsApp message via Jalpi.
+ *
  * @param {object} params
  * @param {string} params.userName      - Name of the user who completed the task
  * @param {string} params.taskTitle     - Title of the completed task
@@ -20,69 +24,59 @@ const GRAPH_API = "https://graph.facebook.com/v21.0";
  * @param {Date|string} params.completedAt - When the task was marked Done
  */
 async function sendTaskCompletedWhatsApp({ userName, taskTitle, priority, completedAt }) {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const token         = process.env.WHATSAPP_ACCESS_TOKEN;
-  const adminNumber   = process.env.ADMIN_WHATSAPP_NUMBER;
-  const templateName  = process.env.WHATSAPP_TEMPLATE_NAME || "task_completed_notify";
+  const apiUrl = process.env.JALPI_API_URL;
+  const token = process.env.JALPI_ACCESS_TOKEN;
+  const phoneId = process.env.JALPI_PHONE_NUMBER_ID;
+  const templateName = process.env.JALPI_TEMPLATE_NAME;
+  const adminNumber = process.env.ADMIN_WHATSAPP_NUMBER;
+  const language = process.env.JALPI_LANGUAGE_CODE || "en";
 
-  // Guard — skip silently if credentials are missing
-  if (!phoneNumberId || !token || !adminNumber) {
-    console.warn("WhatsApp credentials missing — skipping notification.");
+  console.log("DEBUG env:", { apiUrl, token, phoneId, templateName, adminNumber });
+
+  // Guard – skip silently if any credential is missing
+  if (!apiUrl || !token || !phoneId || !templateName || !adminNumber) {
+    console.warn("⚠️ Jalpi credentials missing — skipping WhatsApp notification.");
     return { sent: false, reason: "missing_credentials" };
   }
 
-  const formattedDate = new Date(completedAt).toLocaleString("en-IN", {
-    day:    "2-digit",
-    month:  "short",
-    year:   "numeric",
-    hour:   "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-
-  const body = {
-    messaging_product: "whatsapp",
-    to:   adminNumber,
+  const payload = {
+    to: adminNumber,
     type: "template",
     template: {
-      name:     templateName,
-      language: { code: "en" },
+      name: templateName,
+      language: { code: language },
       components: [
         {
           type: "body",
           parameters: [
-            { type: "text", text: userName    },
-            { type: "text", text: taskTitle   },
+            { type: "text", text: userName },
+            { type: "text", text: taskTitle },
             { type: "text", text: priority || "Medium" },
-            { type: "text", text: formattedDate },
+            { type: "text", text: completedAt },
           ],
         },
       ],
     },
   };
 
-  const response = await fetch(
-    `${GRAPH_API}/${phoneNumberId}/messages`,
-    {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  const response = await fetch(`${apiUrl}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 
   const data = await response.json();
 
   if (!response.ok) {
-    // Throw so the caller can log it — but the task save should not be affected
-    throw new Error(
-      data?.error?.message || `WhatsApp API error ${response.status}`
-    );
+    // Surface the error for debugging – do not throw to break the main flow
+    console.error("Jalpi WhatsApp notification failed:", data?.error?.message || data);
+    return { sent: false, reason: data?.error?.message || "request_failed" };
   }
 
-  return { sent: true, messageId: data?.messages?.[0]?.id };
+  return { sent: true, messageId: data?.message_id || data?.id };
 }
 
 module.exports = { sendTaskCompletedWhatsApp };

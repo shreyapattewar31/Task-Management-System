@@ -37,6 +37,15 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// ─── COOP / COEP fix ─────────────────────────────────────────────────────
+// Remove COOP / COEP headers that can block Google Sign‑In communication.
+// These headers are added by some hosting platforms (Render, Vercel) and
+// prevent the Google Identity Services iframe from posting messages back.
+app.use((req, res, next) => {
+  res.removeHeader('Cross-Origin-Opener-Policy');
+  res.removeHeader('Cross-Origin-Embedder-Policy');
+  next();
+});
 
 // ─── Swagger docs ─────────────────────────────────────────────────────────────
 app.use(
