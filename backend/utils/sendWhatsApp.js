@@ -12,8 +12,6 @@
  *   - JALPI_LANGUAGE_CODE    – Optional language code, defaults to "en"
  */
 
-const fetch = require("node-fetch");
-
 /**
  * Send a WhatsApp message via Jalpi.
  *
@@ -30,8 +28,6 @@ async function sendTaskCompletedWhatsApp({ userName, taskTitle, priority, comple
   const templateName = process.env.JALPI_TEMPLATE_NAME;
   const adminNumber = process.env.ADMIN_WHATSAPP_NUMBER;
   const language = process.env.JALPI_LANGUAGE_CODE || "en";
-
-  console.log("DEBUG env:", { apiUrl, token, phoneId, templateName, adminNumber });
 
   // Guard – skip silently if any credential is missing
   if (!apiUrl || !token || !phoneId || !templateName || !adminNumber) {
@@ -59,7 +55,7 @@ async function sendTaskCompletedWhatsApp({ userName, taskTitle, priority, comple
     },
   };
 
-  const response = await fetch(`${apiUrl}/messages`, {
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
