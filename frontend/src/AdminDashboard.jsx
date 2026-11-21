@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import UserProfile from "./pages/UserProfile";
 import Reports from "./pages/Reports";
 import "./AdminDashboard.css";
@@ -26,7 +26,19 @@ const initialEditForm = {
   dueDate: "",
 };
 
-// ─── Small helpers ────────────────────────────────────────────────────────────
+const STATUS_COLORS = {
+  "Pending": "#f59e0b",
+  "In Progress": "#3b82f6",
+  "Done": "#22c55e",
+  "On Hold": "#a855f7",
+};
+
+const PRIORITY_COLORS = {
+  "Low": "#22c55e",
+  "Medium": "#f59e0b",
+  "High": "#ef4444",
+};
+
 function formatDate(d) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", {
@@ -36,8 +48,17 @@ function formatDate(d) {
   });
 }
 
+function formatDateTime(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
-  // ── data ────────────────────────────────────────────────────────────────────
   const [users, setUsers] = useState([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [usersTotalPages, setUsersTotalPages] = useState(1);
@@ -57,38 +78,50 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // ── assign form ─────────────────────────────────────────────────────────────
   const [assignForm, setAssignForm] = useState(initialTaskForm);
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState("");
   const [assignSuccess, setAssignSuccess] = useState("");
 
-  // ── task edit modal ─────────────────────────────────────────────────────────
   const [editingTask, setEditingTask] = useState(null);
   const [editForm, setEditForm] = useState(initialEditForm);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
-  // ── user edit modal ─────────────────────────────────────────────────────────
   const [editingUser, setEditingUser] = useState(null);
   const [userEditRole, setUserEditRole] = useState("User");
   const [userEditActive, setUserEditActive] = useState(true);
   const [userEditSaving, setUserEditSaving] = useState(false);
   const [userEditError, setUserEditError] = useState("");
 
-  // ── profile modal ────────────────────────────────────────────────────────────
   const [showProfile, setShowProfile] = useState(false);
-
-  // ── active tab ───────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState("overview"); // overview | assign | tasks | users
-
-  // ── sidebar ──────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Dark mode
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("theme") === "dark";
+  });
+
+  // Bulk selection
+  const [selectedTasks, setSelectedTasks] = useState(new Set());
+  const [selectedUsers, setSelectedUsers] = useState(new Set());
+
+  // Calendar
+  const [calendarDate, setCalendarDate] = useState(new Date());
 
   const userSearchTimer = useRef(null);
   const taskSearchTimer = useRef(null);
 
-  // ── fetch functions ──────────────────────────────────────────────────────────
+  // Apply dark mode
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
+  const toggleDarkMode = () => setDarkMode((prev) => !prev);
+
+  // Fetch functions
   const fetchUsers = useCallback(
     async (opts = {}) => {
       const params = new URLSearchParams({
@@ -149,12 +182,11 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // ── assign task ──────────────────────────────────────────────────────────────
+  // Assign task
   const handleAssignTask = async (e) => {
     e.preventDefault();
     setAssignError("");
     setAssignSuccess("");
-
     if (!assignForm.title.trim()) { setAssignError("Task title is required."); return; }
     if (!assignForm.userId) { setAssignError("Please select a user."); return; }
 
@@ -191,7 +223,7 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
     }
   };
 
-  // ── task edit ────────────────────────────────────────────────────────────────
+  // Task edit
   const openTaskEdit = (task) => {
     setEditingTask(task);
     setEditForm({
@@ -244,12 +276,57 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
       });
       if (!res.ok) throw new Error("Delete failed");
       await fetchTasks();
+      setSelectedTasks((prev) => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
     } catch (err) {
       alert(err.message || "Could not delete task");
     }
   };
 
-  // ── user management ──────────────────────────────────────────────────────────
+  // Bulk task actions
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selectedTasks.size} selected tasks?`)) return;
+    try {
+      await Promise.all(
+        Array.from(selectedTasks).map((id) =>
+          fetch(`${API_URL}/admin/tasks/${id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        )
+      );
+      setSelectedTasks(new Set());
+      await fetchTasks();
+    } catch (err) {
+      alert("Some tasks could not be deleted");
+    }
+  };
+
+  const handleBulkStatusChange = async (status) => {
+    try {
+      await Promise.all(
+        Array.from(selectedTasks).map((id) =>
+          fetch(`${API_URL}/admin/tasks/${id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ status }),
+          })
+        )
+      );
+      setSelectedTasks(new Set());
+      await fetchTasks();
+    } catch (err) {
+      alert("Some tasks could not be updated");
+    }
+  };
+
+  // User management
   const openUserEdit = (u) => {
     setEditingUser(u);
     setUserEditRole(u.role);
@@ -291,12 +368,61 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
       if (!res.ok) throw new Error("Delete failed");
       await fetchUsers();
       await fetchTasks();
+      setSelectedUsers((prev) => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
     } catch (err) {
       alert(err.message || "Could not delete user");
     }
   };
 
-  // ── search debounce ─────────────────────────────────────────────────────────
+  // Bulk user actions
+  const handleBulkDeactivateUsers = async () => {
+    if (!window.confirm(`Deactivate ${selectedUsers.size} selected users?`)) return;
+    try {
+      await Promise.all(
+        Array.from(selectedUsers).map((id) =>
+          fetch(`${API_URL}/admin/users/${id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ isActive: false }),
+          })
+        )
+      );
+      setSelectedUsers(new Set());
+      await fetchUsers();
+    } catch (err) {
+      alert("Some users could not be deactivated");
+    }
+  };
+
+  const handleBulkRoleChange = async (role) => {
+    try {
+      await Promise.all(
+        Array.from(selectedUsers).map((id) =>
+          fetch(`${API_URL}/admin/users/${id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ role }),
+          })
+        )
+      );
+      setSelectedUsers(new Set());
+      await fetchUsers();
+    } catch (err) {
+      alert("Some users could not be updated");
+    }
+  };
+
+  // Search debounce
   const handleUsersSearch = (val) => {
     setUsersSearch(val);
     setUsersPage(1);
@@ -311,7 +437,7 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
     taskSearchTimer.current = setTimeout(() => fetchTasks({ search: val, page: 1 }), 400);
   };
 
-  // ── filter helpers ───────────────────────────────────────────────────────────
+  // Filter helpers
   const handleTaskFilterChange = (key, val) => {
     const next = {
       search: tasksSearch,
@@ -328,12 +454,46 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
     fetchTasks({ ...next });
   };
 
-  // ── derived stats ────────────────────────────────────────────────────────────
+  // Derived stats
   const completedCount = tasks.filter((t) => t.status === "Done").length;
   const pendingCount = tasks.filter((t) => t.status === "Pending").length;
   const inProgressCount = tasks.filter((t) => t.status === "In Progress").length;
 
-  // ── loading / error ──────────────────────────────────────────────────────────
+  // Status breakdown for pie chart
+  const statusBreakdown = useMemo(() => {
+    const counts = {};
+    tasks.forEach((t) => {
+      counts[t.status] = (counts[t.status] || 0) + 1;
+    });
+    return counts;
+  }, [tasks]);
+
+  // Priority breakdown for bar chart
+  const priorityBreakdown = useMemo(() => {
+    const counts = {};
+    tasks.forEach((t) => {
+      const p = t.priority || "Medium";
+      counts[p] = (counts[p] || 0) + 1;
+    });
+    return counts;
+  }, [tasks]);
+
+  // Task completion trend (last 7 days)
+  const completionTrend = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().slice(0, 10);
+      const count = tasks.filter(
+        (t) => t.status === "Done" && t.updatedAt && t.updatedAt.slice(0, 10) === dayStr
+      ).length;
+      days.push({ date: d.toLocaleDateString("en-IN", { weekday: "short" }), count });
+    }
+    return days;
+  }, [tasks]);
+
+  // Loading / error
   if (loading) {
     return (
       <div className="admin-state">
@@ -356,9 +516,19 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
     );
   }
 
+  const NAV_ITEMS = [
+    { key: "overview", icon: "📊", label: "Overview" },
+    { key: "assign", icon: "➕", label: "Assign Task" },
+    { key: "tasks", icon: "📋", label: `Tasks`, count: tasksTotal },
+    { key: "users", icon: "👥", label: `Users`, count: usersTotal },
+    { key: "calendar", icon: "📅", label: "Calendar" },
+    { key: "activity", icon: "📝", label: "Activity" },
+    { key: "reports", icon: "📈", label: "Reports" },
+  ];
+
   return (
     <div className="admin-root">
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <aside className={`admin-sidebar ${sidebarOpen ? "admin-sidebar--open" : ""}`} aria-label="Admin navigation">
         <div className="admin-sidebar-brand">
           <span className="admin-brand-icon">✓</span>
@@ -367,13 +537,7 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
         </div>
 
         <nav className="admin-sidebar-nav">
-          {[
-            { key: "overview", icon: "📊", label: "Overview" },
-            { key: "assign",   icon: "➕", label: "Assign Task" },
-            { key: "tasks",    icon: "📋", label: `Tasks (${tasksTotal})` },
-            { key: "users",    icon: "👥", label: `Users (${usersTotal})` },
-            { key: "reports",  icon: "📈", label: "Reports" },
-          ].map((item) => (
+          {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
               className={`admin-nav-item ${activeTab === item.key ? "admin-nav-item--active" : ""}`}
@@ -381,6 +545,9 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
             >
               <span className="admin-nav-icon">{item.icon}</span>
               <span className="admin-nav-label">{item.label}</span>
+              {item.count !== undefined && item.count > 0 && (
+                <span className="admin-nav-badge">{item.count}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -393,14 +560,15 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
               <span className="admin-sidebar-user-role">Admin</span>
             </div>
           </div>
+          <button className="admin-theme-toggle" onClick={toggleDarkMode} title={darkMode ? "Light mode" : "Dark mode"}>
+            {darkMode ? "☀️" : "🌙"}
+          </button>
           <button className="admin-sidebar-logout" onClick={onLogout} title="Logout">⏻</button>
         </div>
       </aside>
 
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && <div className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      {/* ── Main area ── */}
       <div className="admin-layout">
         {/* Mobile topbar */}
         <header className="admin-topbar">
@@ -411,6 +579,9 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
             <span className="admin-brand-tag">Admin</span>
           </div>
           <div className="admin-topbar-right">
+            <button className="admin-theme-toggle" onClick={toggleDarkMode} title={darkMode ? "Light mode" : "Dark mode"}>
+              {darkMode ? "☀️" : "🌙"}
+            </button>
             <button className="admin-avatar-btn" onClick={() => setShowProfile(true)} title="My Profile">
               <span className="admin-avatar">{(user?.name || "A")[0].toUpperCase()}</span>
               <span className="admin-username">{user?.name}</span>
@@ -426,10 +597,10 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
             <div className="admin-summary">
               {[
                 { icon: "👥", label: "Registered Users", value: usersTotal, cls: "users-icon" },
-                { icon: "📋", label: "Total Tasks",       value: tasksTotal, cls: "tasks-icon" },
-                { icon: "✅", label: "Completed",         value: completedCount, cls: "completed-icon" },
-                { icon: "⏳", label: "Pending",           value: pendingCount, cls: "pending-icon" },
-                { icon: "🔄", label: "In Progress",       value: inProgressCount, cls: "progress-icon" },
+                { icon: "📋", label: "Total Tasks", value: tasksTotal, cls: "tasks-icon" },
+                { icon: "✅", label: "Completed", value: completedCount, cls: "completed-icon" },
+                { icon: "⏳", label: "Pending", value: pendingCount, cls: "pending-icon" },
+                { icon: "🔄", label: "In Progress", value: inProgressCount, cls: "progress-icon" },
               ].map((s) => (
                 <article key={s.label} className="admin-stat-card">
                   <div className={`admin-stat-icon ${s.cls}`}>{s.icon}</div>
@@ -439,6 +610,23 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
                   </div>
                 </article>
               ))}
+            </div>
+
+            {/* Charts */}
+            <div className="admin-charts-row">
+              <div className="admin-chart-card">
+                <h3>Tasks by Status</h3>
+                <PieChart data={statusBreakdown} colors={STATUS_COLORS} />
+              </div>
+              <div className="admin-chart-card">
+                <h3>Tasks by Priority</h3>
+                <BarChart data={priorityBreakdown} colors={PRIORITY_COLORS} />
+              </div>
+            </div>
+
+            <div className="admin-chart-card admin-chart-card-full">
+              <h3>Task Completion Trend (Last 7 Days)</h3>
+              <LineChart data={completionTrend} />
             </div>
 
             {/* Recent tasks */}
@@ -582,6 +770,18 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
               </select>
             </div>
 
+            {/* Bulk actions bar */}
+            {selectedTasks.size > 0 && (
+              <div className="admin-bulk-bar">
+                <span className="admin-bulk-bar-label">{selectedTasks.size} selected</span>
+                <button className="admin-bulk-btn admin-bulk-btn--primary" onClick={() => handleBulkStatusChange("In Progress")}>→ In Progress</button>
+                <button className="admin-bulk-btn admin-bulk-btn--primary" onClick={() => handleBulkStatusChange("Done")}>✓ Done</button>
+                <button className="admin-bulk-btn admin-bulk-btn--primary" onClick={() => handleBulkStatusChange("On Hold")}>⏸ On Hold</button>
+                <button className="admin-bulk-btn admin-bulk-btn--danger" onClick={handleBulkDelete}>🗑 Delete</button>
+                <button className="admin-bulk-btn" onClick={() => setSelectedTasks(new Set())}>✕ Clear</button>
+              </div>
+            )}
+
             {tasks.length === 0 ? (
               <EmptyState icon="📋" title="No tasks found" sub="Try adjusting your filters." />
             ) : (
@@ -590,6 +790,15 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
                   <table className="admin-table">
                     <thead>
                       <tr>
+                        <th className="admin-checkbox-cell">
+                          <input type="checkbox" className="admin-checkbox"
+                            checked={selectedTasks.size === tasks.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedTasks(new Set(tasks.map((t) => t._id)));
+                              else setSelectedTasks(new Set());
+                            }}
+                          />
+                        </th>
                         <th>Task</th>
                         <th>Assigned To</th>
                         <th>Priority</th>
@@ -602,6 +811,17 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
                     <tbody>
                       {tasks.map((task) => (
                         <tr key={task._id}>
+                          <td className="admin-checkbox-cell">
+                            <input type="checkbox" className="admin-checkbox"
+                              checked={selectedTasks.has(task._id)}
+                              onChange={(e) => {
+                                const next = new Set(selectedTasks);
+                                if (e.target.checked) next.add(task._id);
+                                else next.delete(task._id);
+                                setSelectedTasks(next);
+                              }}
+                            />
+                          </td>
                           <td className="admin-name-cell">{task.title}</td>
                           <td>
                             <div>{typeof task.userId === "object" ? task.userId?.name : "—"}</div>
@@ -658,6 +878,16 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
               />
             </div>
 
+            {selectedUsers.size > 0 && (
+              <div className="admin-bulk-bar">
+                <span className="admin-bulk-bar-label">{selectedUsers.size} selected</span>
+                <button className="admin-bulk-btn admin-bulk-btn--danger" onClick={handleBulkDeactivateUsers}>⏸ Deactivate</button>
+                <button className="admin-bulk-btn admin-bulk-btn--primary" onClick={() => handleBulkRoleChange("User")}>👤 → User</button>
+                <button className="admin-bulk-btn admin-bulk-btn--primary" onClick={() => handleBulkRoleChange("Admin")}>👑 → Admin</button>
+                <button className="admin-bulk-btn" onClick={() => setSelectedUsers(new Set())}>✕ Clear</button>
+              </div>
+            )}
+
             {users.length === 0 ? (
               <EmptyState icon="👥" title="No users found" sub="Registered accounts will appear here." />
             ) : (
@@ -666,6 +896,15 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
                   <table className="admin-table">
                     <thead>
                       <tr>
+                        <th className="admin-checkbox-cell">
+                          <input type="checkbox" className="admin-checkbox"
+                            checked={selectedUsers.size === users.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedUsers(new Set(users.map((u) => u._id)));
+                              else setSelectedUsers(new Set());
+                            }}
+                          />
+                        </th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
@@ -677,6 +916,17 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
                     <tbody>
                       {users.map((u) => (
                         <tr key={u._id}>
+                          <td className="admin-checkbox-cell">
+                            <input type="checkbox" className="admin-checkbox"
+                              checked={selectedUsers.has(u._id)}
+                              onChange={(e) => {
+                                const next = new Set(selectedUsers);
+                                if (e.target.checked) next.add(u._id);
+                                else next.delete(u._id);
+                                setSelectedUsers(next);
+                              }}
+                            />
+                          </td>
                           <td className="admin-name-cell">{u.name}</td>
                           <td>{u.email}</td>
                           <td>
@@ -710,6 +960,30 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
                 />
               </>
             )}
+          </div>
+        )}
+
+        {/* ══ CALENDAR TAB ═════════════════════════════════════════════════════ */}
+        {activeTab === "calendar" && (
+          <div className="admin-panel">
+            <div className="admin-panel-header">
+              <div><h2>Calendar View</h2><p>View tasks by due date.</p></div>
+            </div>
+            <div className="admin-calendar">
+              <CalendarView tasks={tasks} date={calendarDate} onDateChange={setCalendarDate} />
+            </div>
+          </div>
+        )}
+
+        {/* ══ ACTIVITY TAB ═════════════════════════════════════════════════════ */}
+        {activeTab === "activity" && (
+          <div className="admin-panel">
+            <div className="admin-panel-header">
+              <div><h2>Activity Log</h2><p>Recent user and task activity.</p></div>
+            </div>
+            <div className="admin-activity-list">
+              <ActivityList tasks={tasks} users={users} />
+            </div>
           </div>
         )}
 
@@ -884,6 +1158,275 @@ function Pagination({ page, totalPages, onPrev, onNext, onPage }) {
         )
       )}
       <button className="admin-page-btn" disabled={page >= totalPages} onClick={onNext}>Next →</button>
+    </div>
+  );
+}
+
+// ─── Pie Chart ────────────────────────────────────────────────────────────────
+function PieChart({ data, colors }) {
+  const entries = Object.entries(data);
+  const total = entries.reduce((sum, [, val]) => sum + val, 0);
+  if (total === 0) return <div className="admin-empty-state"><p>No data</p></div>;
+
+  let offset = 0;
+  const slices = entries.map(([label, value]) => {
+    const percent = (value / total) * 100;
+    const startAngle = (offset / total) * 360;
+    const endAngle = ((offset + value) / total) * 360;
+    offset += value;
+    return { label, value, percent, startAngle, endAngle, color: colors[label] || "#94a3b8" };
+  });
+
+  const radius = 60;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <div className="admin-pie-container">
+      <svg className="admin-pie-chart" viewBox="0 0 140 140">
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--admin-border)" strokeWidth="20" />
+        {slices.map((s) => {
+          const dashLength = (s.value / total) * circumference;
+          const dashOffset = -((s.startAngle / 360) * circumference);
+          return (
+            <circle
+              key={s.label}
+              cx="70" cy="70" r={radius}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="20"
+              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 70 70)"
+            />
+          );
+        })}
+        <text x="70" y="65" textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--admin-text)">{total}</text>
+        <text x="70" y="85" textAnchor="middle" fontSize="10" fill="var(--admin-text-muted)">Total</text>
+      </svg>
+      <div className="admin-pie-legend">
+        {slices.map((s) => (
+          <div key={s.label} className="admin-legend-item">
+            <span className="admin-legend-dot" style={{ background: s.color }} />
+            <span className="admin-legend-label">{s.label}</span>
+            <span className="admin-legend-value">{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Bar Chart ────────────────────────────────────────────────────────────────
+function BarChart({ data, colors }) {
+  const entries = Object.entries(data);
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+
+  if (entries.length === 0) return <div className="admin-empty-state"><p>No data</p></div>;
+
+  return (
+    <div className="admin-bar-chart">
+      {entries.map(([label, value]) => (
+        <div key={label} className="admin-bar-item">
+          <div
+            className="admin-bar-fill"
+            style={{
+              height: `${(value / max) * 100}%`,
+              background: colors[label] || "#94a3b8",
+            }}
+          />
+          <span className="admin-bar-value">{value}</span>
+          <span className="admin-bar-label">{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Line Chart ───────────────────────────────────────────────────────────────
+function LineChart({ data }) {
+  if (data.length === 0) return <div className="admin-empty-state"><p>No data</p></div>;
+
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const width = 600;
+  const height = 140;
+  const padding = 20;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+
+  const points = data.map((d, i) => {
+    const x = padding + (i / (data.length - 1)) * chartWidth;
+    const y = padding + chartHeight - (d.count / max) * chartHeight;
+    return { x, y, ...d };
+  });
+
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+  return (
+    <div className="admin-line-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        <line x1={padding} y1={padding + chartHeight} x2={width - padding} y2={padding + chartHeight} stroke="var(--admin-border)" strokeWidth="1" />
+        <path d={pathD} fill="none" stroke="var(--admin-primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p) => (
+          <g key={p.date}>
+            <circle cx={p.x} cy={p.y} r="4" fill="var(--admin-primary)" />
+            <text x={p.x} y={height - 2} textAnchor="middle" fontSize="10" fill="var(--admin-text-muted)">{p.date}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ─── Calendar View ────────────────────────────────────────────────────────────
+function CalendarView({ tasks, date, onDateChange }) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDate = new Date(year, month, 1 - firstDay.getDay());
+  const endDate = new Date(year, month, lastDay.getDate() + (6 - lastDay.getDay()));
+
+  const days = [];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    days.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  const today = new Date();
+  const isToday = (d) =>
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear();
+
+  const tasksByDate = {};
+  tasks.forEach((t) => {
+    if (t.dueDate) {
+      const dateStr = t.dueDate.slice(0, 10);
+      if (!tasksByDate[dateStr]) tasksByDate[dateStr] = [];
+      tasksByDate[dateStr].push(t);
+    }
+  });
+
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  const navigate = (offset) => {
+    onDateChange(new Date(year, month + offset, 1));
+  };
+
+  return (
+    <div>
+      <div className="admin-calendar-header">
+        <div className="admin-calendar-title">
+          {monthNames[month]} {year}
+        </div>
+        <div className="admin-calendar-nav">
+          <button className="admin-calendar-nav-btn" onClick={() => navigate(-1)}>◀</button>
+          <button className="admin-calendar-nav-btn" onClick={() => onDateChange(new Date())}>Today</button>
+          <button className="admin-calendar-nav-btn" onClick={() => navigate(1)}>▶</button>
+        </div>
+      </div>
+      <div className="admin-calendar-grid">
+        {dayNames.map((d) => (
+          <div key={d} className="admin-calendar-day-header">{d}</div>
+        ))}
+        {days.map((day) => {
+          const dateStr = day.toISOString().slice(0, 10);
+          const dayTasks = tasksByDate[dateStr] || [];
+          const isOtherMonth = day.getMonth() !== month;
+
+          return (
+            <div
+              key={dateStr}
+              className={`admin-calendar-day ${isOtherMonth ? "admin-calendar-day--other-month" : ""} ${isToday(day) ? "admin-calendar-day--today" : ""}`}
+            >
+              <div className="admin-calendar-day-number">{day.getDate()}</div>
+              {dayTasks.slice(0, 3).map((t) => (
+                <div
+                  key={t._id}
+                  className={`admin-calendar-task admin-calendar-task--${t.status?.toLowerCase().replace(/\s+/g, "-") || "pending"}`}
+                  title={t.title}
+                >
+                  {t.title}
+                </div>
+              ))}
+              {dayTasks.length > 3 && (
+                <div className="admin-calendar-task" style={{ fontSize: 9, color: "var(--admin-text-muted)" }}>
+                  +{dayTasks.length - 3} more
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Activity List ────────────────────────────────────────────────────────────
+function ActivityList({ tasks, users }) {
+  const activities = [];
+
+  tasks.forEach((t) => {
+    activities.push({
+      type: "task_created",
+      icon: "📋",
+      text: <><strong>{t.title}</strong> was created</>,
+      time: t.createdAt,
+      color: "#3b82f6",
+    });
+    if (t.updatedAt && t.updatedAt !== t.createdAt) {
+      activities.push({
+        type: "task_updated",
+        icon: "✏️",
+        text: <><strong>{t.title}</strong> was updated</>,
+        time: t.updatedAt,
+        color: "#f59e0b",
+      });
+    }
+    if (t.status === "Done") {
+      activities.push({
+        type: "task_completed",
+        icon: "✅",
+        text: <><strong>{t.title}</strong> was completed</>,
+        time: t.updatedAt || t.createdAt,
+        color: "#22c55e",
+      });
+    }
+  });
+
+  users.forEach((u) => {
+    activities.push({
+      type: "user_registered",
+      icon: "👤",
+      text: <><strong>{u.name}</strong> registered</>,
+      time: u.createdAt,
+      color: "#a855f7",
+    });
+  });
+
+  activities.sort((a, b) => new Date(b.time) - new Date(a.time));
+  const recent = activities.slice(0, 30);
+
+  if (recent.length === 0) {
+    return <EmptyState icon="📝" title="No activity yet" sub="Activity will appear as users and tasks are created." />;
+  }
+
+  return (
+    <div>
+      {recent.map((a, i) => (
+        <div key={i} className="admin-activity-item">
+          <div className="admin-activity-icon" style={{ background: `${a.color}20`, color: a.color }}>
+            {a.icon}
+          </div>
+          <div className="admin-activity-content">
+            <div className="admin-activity-text">{a.text}</div>
+            <div className="admin-activity-time">{formatDateTime(a.time)}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
