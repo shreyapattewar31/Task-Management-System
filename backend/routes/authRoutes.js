@@ -2,11 +2,27 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const multer = require("multer");
+const path = require("path");
 const User = require("../models/Users");
 const { sendPasswordResetEmail } = require("../utils/sendEmail");
 const { protect } = require("../middleware/auth");
 
 const router = express.Router();
+
+// Configure multer for avatar uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"), false);
+    }
+  },
+});
 
 // User Signup
 router.post("/signup", async (req, res) => {
@@ -304,6 +320,78 @@ router.put("/change-password", protect, async (req, res) => {
   } catch (error) {
     console.error("Change password error:", error);
     res.status(500).json({ message: "Failed to change password" });
+  }
+});
+
+// Upload avatar (file)
+router.post("/avatar", protect, upload.single("avatar"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    // Convert to base64 data URL
+    const base64 = req.file.buffer.toString("base64");
+    const avatarUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { avatarUrl },
+      { new: true, runValidators: true }
+    ).select("-password -passwordResetToken -passwordResetExpires");
+
+    res.status(200).json({ message: "Avatar uploaded", avatarUrl, user });
+  } catch (error) {
+    console.error("Avatar upload error:", error);
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({ message: "Failed to upload avatar" });
+  }
+});
+
+// Update avatar URL
+router.put("/avatar-url", protect, async (req, res) => {
+  try {
+    const { avatarUrl } = req.body;
+
+    if (!avatarUrl || !avatarUrl.trim()) {
+      return res.status(400).json({ message: "Avatar URL is required" });
+    }
+
+    // Validate URL format
+    try {
+      new URL(avatarUrl);
+    } catch {
+      return res.status(400).json({ message: "Invalid URL format" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { avatarUrl: avatarUrl.trim() },
+      { new: true, runValidators: true }
+    ).select("-password -passwordResetToken -passwordResetExpires");
+
+    res.status(200).json({ message: "Avatar URL updated", avatarUrl: user.avatarUrl, user });
+  } catch (error) {
+    console.error("Avatar URL update error:", error);
+    res.status(500).json({ message: "Failed to update avatar URL" });
+  }
+});
+
+// Remove avatar
+router.delete("/avatar", protect, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { avatarUrl: "" },
+      { new: true, runValidators: true }
+    ).select("-password -passwordResetToken -passwordResetExpires");
+
+    res.status(200).json({ message: "Avatar removed", user });
+  } catch (error) {
+    console.error("Avatar remove error:", error);
+    res.status(500).json({ message: "Failed to remove avatar" });
   }
 });
 

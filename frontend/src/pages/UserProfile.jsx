@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import PasswordInput from "../components/PasswordInput";
 
 const API_URL =
@@ -17,6 +17,15 @@ function UserProfile({ user, token, onClose, onUserUpdate }) {
   const [confirmPw, setConfirmPw] = useState("");
   const [pwMsg, setPwMsg] = useState({ text: "", ok: false });
   const [pwSaving, setPwSaving] = useState(false);
+
+  // Profile picture
+  const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(user.avatarUrl || "");
+  const [avatarMsg, setAvatarMsg] = useState({ text: "", ok: false });
+  const [avatarSaving, setAvatarSaving] = useState(false);
+
+  const fileInputRef = useRef(null);
 
   const handleNameSave = async (e) => {
     e.preventDefault();
@@ -84,6 +93,102 @@ function UserProfile({ user, token, onClose, onUserUpdate }) {
     }
   };
 
+  const handleAvatarFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setAvatarMsg({ text: "Please select an image file", ok: false });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarMsg({ text: "Image must be less than 2MB", ok: false });
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarMsg({ text: "", ok: false });
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setAvatarPreview(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAvatarUrlChange = (e) => {
+    const url = e.target.value.trim();
+    setAvatarUrl(url);
+    setAvatarMsg({ text: "", ok: false });
+    if (url) setAvatarPreview(url);
+  };
+
+  const handleAvatarSave = async (e) => {
+    e.preventDefault();
+    setAvatarMsg({ text: "", ok: false });
+    setAvatarSaving(true);
+    try {
+      let finalAvatarUrl = avatarUrl;
+
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("avatar", avatarFile);
+        const res = await fetch(`${API_URL}/auth/avatar`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Upload failed");
+        finalAvatarUrl = data.avatarUrl;
+      } else if (avatarUrl && avatarUrl !== user.avatarUrl) {
+        const res = await fetch(`${API_URL}/auth/avatar-url`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ avatarUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Update failed");
+        finalAvatarUrl = data.avatarUrl;
+      } else {
+        setAvatarMsg({ text: "No changes to save", ok: false });
+        return;
+      }
+
+      setAvatarMsg({ text: "Profile picture updated!", ok: true });
+      setAvatarPreview(finalAvatarUrl);
+      onUserUpdate({ ...user, avatarUrl: finalAvatarUrl });
+    } catch (err) {
+      setAvatarMsg({ text: err.message, ok: false });
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
+  const handleRemoveAvatar = async (e) => {
+    e.preventDefault();
+    if (!window.confirm("Remove your profile picture?")) return;
+    setAvatarSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/avatar`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to remove avatar");
+      setAvatarMsg({ text: "Profile picture removed", ok: true });
+      setAvatarUrl("");
+      setAvatarFile(null);
+      setAvatarPreview("");
+      onUserUpdate({ ...user, avatarUrl: "" });
+    } catch (err) {
+      setAvatarMsg({ text: err.message, ok: false });
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
+  const initials = (user.name || "U").slice(0, 2).toUpperCase();
+
   return (
     <div className="profile-overlay" onClick={onClose}>
       <div
@@ -95,9 +200,22 @@ function UserProfile({ user, token, onClose, onUserUpdate }) {
         {/* Header */}
         <div className="profile-header">
           <div className="profile-avatar">
-            {(user.name || "U")[0].toUpperCase()}
+            {avatarPreview ? (
+              <img src={avatarPreview} alt={`${user.name}'s avatar`} />
+            ) : (
+              initials
+            )}
+            <label className="profile-avatar-edit" title="Change avatar">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFileChange}
+                style={{ display: "none" }}
+              />
+              📷
+            </label>
           </div>
-          <div>
+          <div className="profile-header-content">
             <h2 className="profile-title">{user.name}</h2>
             <p className="profile-email">{user.email}</p>
             <span className={`profile-role-badge role-${user.role?.toLowerCase()}`}>
@@ -108,6 +226,72 @@ function UserProfile({ user, token, onClose, onUserUpdate }) {
             ✕
           </button>
         </div>
+
+        {/* Edit Profile Picture */}
+        <section className="profile-section">
+          <h3 className="profile-section-title">Profile Picture</h3>
+          <form onSubmit={handleAvatarSave} className="profile-form profile-image-upload">
+            <div className="profile-field">
+              <label className="profile-label">Upload Image</label>
+              <div className="profile-avatar-upload">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFileChange}
+                  className="profile-input"
+                  style={{ display: "none" }}
+                  id="avatar-file-input"
+                  ref={fileInputRef}
+                />
+                {avatarPreview ? (
+                  <img src={avatarPreview} alt="Preview" className="profile-image-preview" />
+                ) : (
+                  <div className="profile-image-preview" style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "var(--admin-bg)", color: "var(--admin-text-muted)", fontSize: "24px" }}>
+                    {initials}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="profile-upload-btn profile-upload-btn--primary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarSaving}
+                >
+                  📁 Upload Image
+                </button>
+              </div>
+            </div>
+            <div className="profile-field">
+              <label className="profile-label">Or Image URL</label>
+              <input
+                type="url"
+                className="profile-input"
+                placeholder="https://example.com/avatar.jpg"
+                value={avatarUrl}
+                onChange={handleAvatarUrlChange}
+              />
+            </div>
+            <div className="profile-upload-btns">
+              <button type="submit" className="profile-btn profile-btn--primary" disabled={avatarSaving}>
+                {avatarSaving ? "Saving..." : "Save Picture"}
+              </button>
+              {avatarPreview && (
+                <button
+                  type="button"
+                  className="profile-upload-btn"
+                  onClick={handleRemoveAvatar}
+                  disabled={avatarSaving}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {avatarMsg.text && (
+              <p className={`profile-msg ${avatarMsg.ok ? "profile-msg--ok" : "profile-msg--err"}`}>
+                {avatarMsg.text}
+              </p>
+            )}
+          </form>
+        </section>
 
         {/* Edit Name */}
         <section className="profile-section">

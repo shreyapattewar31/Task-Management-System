@@ -102,8 +102,17 @@ export default function App() {
   // nav
   const [activeSection, setActiveSection] = useState("tasks"); // tasks | reports | profile
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [deactivatedMsg, setDeactivatedMsg] = useState("");
+
+  // Current date/time
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── auth ──────────────────────────────────────────────────────────────────
   const handleAuth = async (e) => {
@@ -319,9 +328,19 @@ export default function App() {
   ];
 
   return (
-    <div className="ud-shell">
+    <div className={`ud-shell ${sidebarCollapsed ? "ud-shell--sidebar-collapsed" : ""}`}>
+      {/* Sidebar Toggle Button (desktop only) */}
+      <button
+        className="ud-sidebar-toggle"
+        onClick={() => setSidebarCollapsed((prev) => !prev)}
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {sidebarCollapsed ? "▶" : "◀"}
+      </button>
+
       {/* ── Sidebar ── */}
-      <aside className={`ud-sidebar ${sidebarOpen ? "ud-sidebar--open" : ""}`} aria-label="Sidebar navigation">
+      <aside className={`ud-sidebar ${sidebarOpen ? "ud-sidebar--open" : ""} ${sidebarCollapsed ? "ud-sidebar--collapsed" : ""}`} aria-label="Sidebar navigation">
         <div className="ud-sidebar-brand">
           <span className="ud-brand-icon">✓</span>
           <span className="ud-brand-name">Task Manager</span>
@@ -338,13 +357,22 @@ export default function App() {
         </nav>
         <div className="ud-sidebar-footer">
           <div className="ud-sidebar-user">
-            <span className="ud-avatar">{(user.name || "U")[0].toUpperCase()}</span>
+            <span className="ud-avatar">
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+              ) : (
+                (user.name || "U")[0].toUpperCase()
+              )}
+            </span>
             <div className="ud-sidebar-user-info">
               <span className="ud-sidebar-user-name">{user.name}</span>
               <span className="ud-sidebar-user-role">{user.role}</span>
             </div>
           </div>
-          <button className="ud-sidebar-logout" onClick={handleLogout} title="Logout">⏻</button>
+          <button className="ud-sidebar-logout" onClick={handleLogout} title="Logout">
+            <span>⏻</span>
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
 
@@ -359,7 +387,11 @@ export default function App() {
             <span className="ud-brand-name">Task Manager</span>
           </div>
           <button className="ud-avatar-btn" onClick={() => setShowProfile(true)} title="My Profile">
-            <span className="ud-avatar">{(user.name || "U")[0].toUpperCase()}</span>
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+            ) : (
+              <span className="ud-avatar">{(user.name || "U")[0].toUpperCase()}</span>
+            )}
           </button>
         </header>
 
@@ -594,6 +626,16 @@ export default function App() {
           onClose={() => { setShowProfile(false); setActiveSection("tasks"); }}
           onUserUpdate={handleUserUpdate} />
       )}
+
+      {/* Date/Time Widget */}
+      <div className="ud-datetime-widget">
+        <span className="datetime-date">
+          {currentTime.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+        </span>
+        <span className="datetime-time">
+          {currentTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+        </span>
+      </div>
     </div>
   );
 }

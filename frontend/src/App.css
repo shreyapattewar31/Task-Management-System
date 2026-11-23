@@ -95,12 +95,34 @@ a, button { -webkit-tap-highlight-color: transparent; }
   position: fixed; top: 0; left: 0; height: 100svh; width: var(--sidebar-w);
   background: var(--surface); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; z-index: 60;
-  transition: transform .25s ease;
+  transition: width var(--transition), background .2s;
 }
 
-.ud-sidebar-brand { display: flex; align-items: center; gap: 8px; padding: 20px 16px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 800; color: var(--brand); letter-spacing: -.3px; }
+.ud-sidebar--collapsed {
+  width: var(--sidebar-collapsed-w);
+}
+
+.ud-sidebar--collapsed .ud-brand-name,
+.ud-sidebar--collapsed .ud-nav-label,
+.ud-sidebar--collapsed .ud-sidebar-user-info,
+.ud-sidebar--collapsed .ud-sidebar-logout {
+  display: none;
+}
+
+.ud-sidebar--collapsed .ud-sidebar-brand { justify-content: center; padding: 20px 0; }
+.ud-sidebar--collapsed .ud-nav-item { justify-content: center; padding: 10px 0; }
+.ud-sidebar--collapsed .ud-sidebar-footer { justify-content: center; padding: 12px 0; }
+.ud-sidebar--collapsed .ud-sidebar-user { justify-content: center; }
+
+:root {
+  --sidebar-w: 240px;
+  --sidebar-collapsed-w: 72px;
+  --transition: .25s ease;
+}
+
+.ud-sidebar-brand { display: flex; align-items: center; gap: 8px; padding: 20px 16px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 800; color: var(--brand); letter-spacing: -.3px; transition: var(--transition); }
 .ud-brand-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--brand); color: #fff; border-radius: 6px; font-size: 14px; font-weight: 900; flex-shrink: 0; }
-.ud-brand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ud-brand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: var(--transition); }
 
 .ud-sidebar-nav { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 
@@ -108,27 +130,75 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .ud-nav-item:hover { background: var(--surface-2); color: var(--text); }
 .ud-nav-item--active { background: var(--brand-light); color: var(--brand); font-weight: 700; }
 .ud-nav-icon { font-size: 16px; flex-shrink: 0; }
-.ud-nav-label { flex: 1; }
+.ud-nav-label { flex: 1; transition: var(--transition); }
 
-.ud-sidebar-footer { padding: 12px 10px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-.ud-sidebar-user { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.ud-sidebar-footer { padding: 12px 10px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; transition: var(--transition); }
+.ud-sidebar-user { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; transition: var(--transition); }
 .ud-avatar { width: 32px; height: 32px; background: var(--brand); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
-.ud-sidebar-user-info { display: flex; flex-direction: column; min-width: 0; }
+.ud-sidebar-user-info { display: flex; flex-direction: column; min-width: 0; transition: var(--transition); }
 .ud-sidebar-user-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ud-sidebar-user-role { font-size: 11px; color: var(--text-3); }
-.ud-sidebar-logout { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; font-size: 15px; color: var(--text-2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s; }
+.ud-sidebar-logout { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  padding: 6px 12px; 
+  border: 1px solid var(--border); 
+  border-radius: var(--radius-sm); 
+  background: var(--surface); 
+  cursor: pointer; 
+  font-size: 13px; 
+  font-weight: 500; 
+  color: var(--text-2); 
+  transition: background .15s, var(--transition); 
+  white-space: nowrap;
+}
 .ud-sidebar-logout:hover { background: var(--danger-light); color: var(--danger); border-color: #fca5a5; }
+
+.ud-sidebar--collapsed .ud-sidebar-logout { 
+  width: 32px; 
+  height: 32px; 
+  padding: 0; 
+  justify-content: center; 
+}
+.ud-sidebar--collapsed .ud-sidebar-logout span { display: none; }
 
 .ud-sidebar-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 55; display: none; }
 
 /* ─── Layout (content right of sidebar) ─────────────────────────────────── */
-.ud-layout { flex: 1; margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100svh; min-width: 0; }
+.ud-layout { flex: 1; margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100svh; min-width: 0; transition: margin-left var(--transition); }
+.ud-shell--sidebar-collapsed .ud-layout { margin-left: var(--sidebar-collapsed-w); }
+
+/* ─── Sidebar Toggle Button ──────────────────────────────────────────────── */
+.ud-sidebar-toggle { 
+  position: fixed; 
+  top: 16px; 
+  left: calc(var(--sidebar-w) + 12px); 
+  z-index: 70; 
+  width: 32px; 
+  height: 32px; 
+  border: 1px solid var(--border); 
+  border-radius: var(--radius-sm); 
+  background: var(--surface); 
+  cursor: pointer; 
+  font-size: 14px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  box-shadow: var(--shadow-sm); 
+  transition: left var(--transition), background .15s; 
+}
+.ud-sidebar-toggle:hover { background: var(--surface-2); }
+.ud-shell--sidebar-collapsed .ud-sidebar-toggle { left: calc(var(--sidebar-collapsed-w) + 12px); }
+.ud-sidebar-toggle:focus { outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,.2); }
 
 /* ─── Topbar (mobile only) ───────────────────────────────────────────────── */
 .ud-topbar { display: none; position: sticky; top: 0; z-index: 50; background: var(--surface); border-bottom: 1px solid var(--border); height: var(--topbar-h); padding: 0 16px; align-items: center; justify-content: space-between; gap: 12px; box-shadow: var(--shadow-sm); }
 .ud-hamburger { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; font-size: 18px; color: var(--text); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .ud-topbar-brand { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; color: var(--brand); flex: 1; justify-content: center; }
 .ud-avatar-btn { width: 36px; height: 36px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.ud-avatar-btn img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.ud-avatar-btn .ud-avatar { width: 32px; height: 32px; background: var(--brand); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
 
 /* ─── Main content ───────────────────────────────────────────────────────── */
 .ud-main { flex: 1; padding: 28px 28px 48px; max-width: 1100px; width: 100%; }
@@ -309,6 +379,15 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .profile-msg--ok { background: var(--success-light); color: var(--success); }
 .profile-msg--err { background: var(--danger-light); color: var(--danger); }
 
+/* ─── Profile avatar upload ───────────────────────────────────────────────── */
+.profile-avatar-upload { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.profile-avatar-upload .profile-image-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border); }
+.profile-upload-btn { padding: 10px 18px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
+.profile-upload-btn:hover:not(:disabled) { background: var(--surface-2); }
+.profile-upload-btn:disabled { opacity: .6; cursor: not-allowed; }
+.profile-upload-btn--primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+.profile-upload-btn--primary:hover:not(:disabled) { background: var(--brand-hover); }
+
 /* ─── Deactivated account banner ─────────────────────────────────────────── */
 .auth-deactivated-banner {
   width: 100%;
@@ -375,6 +454,37 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .profile-modal { max-height: 95svh; }
   .profile-section { padding: 16px; }
   .profile-btn { width: 100%; text-align: center; }
+}
+
+/* ─── Date/Time Widget ───────────────────────────────────────────────────── */
+.ud-datetime-widget {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 40;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2);
+  box-shadow: var(--shadow-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ud-datetime-widget .datetime-date {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ud-datetime-widget .datetime-time {
+  display: block;
+  font-size: 10px;
+  color: var(--text-3);
 }
 
 @media (max-width: 480px) {

@@ -97,6 +97,7 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
   const [showProfile, setShowProfile] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => {
@@ -112,6 +113,14 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
 
   const userSearchTimer = useRef(null);
   const taskSearchTimer = useRef(null);
+
+  // Current date/time
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Apply dark mode
   useEffect(() => {
@@ -527,9 +536,19 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
   ];
 
   return (
-    <div className="admin-root">
+    <div className={`admin-root ${sidebarCollapsed ? "admin-root--sidebar-collapsed" : ""}`}>
+      {/* Sidebar Toggle Button (desktop only) */}
+      <button
+        className="admin-sidebar-toggle"
+        onClick={() => setSidebarCollapsed((prev) => !prev)}
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {sidebarCollapsed ? "▶" : "◀"}
+      </button>
+
       {/* Sidebar */}
-      <aside className={`admin-sidebar ${sidebarOpen ? "admin-sidebar--open" : ""}`} aria-label="Admin navigation">
+      <aside className={`admin-sidebar ${sidebarOpen ? "admin-sidebar--open" : ""} ${sidebarCollapsed ? "admin-sidebar--collapsed" : ""}`} aria-label="Admin navigation">
         <div className="admin-sidebar-brand">
           <span className="admin-brand-icon">✓</span>
           <span className="admin-brand-name">Task Manager</span>
@@ -563,7 +582,10 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
           <button className="admin-theme-toggle" onClick={toggleDarkMode} title={darkMode ? "Light mode" : "Dark mode"}>
             {darkMode ? "☀️" : "🌙"}
           </button>
-          <button className="admin-sidebar-logout" onClick={onLogout} title="Logout">⏻</button>
+          <button className="admin-sidebar-logout" onClick={onLogout} title="Logout">
+            <span>⏻</span>
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
 
@@ -996,6 +1018,16 @@ function AdminDashboard({ token, user, onLogout, onUserUpdate }) {
       </div>{/* admin-layout */}
 
       <footer className="admin-footer">Task Management System · Admin Panel</footer>
+
+      {/* Date/Time Widget */}
+      <div className="admin-datetime-widget">
+        <span className="datetime-date">
+          {currentTime.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+        </span>
+        <span className="datetime-time">
+          {currentTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+        </span>
+      </div>
 
       {/* ══ Task Edit Modal ══════════════════════════════════════════════════ */}
       {editingTask && (
