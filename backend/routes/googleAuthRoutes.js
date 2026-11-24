@@ -41,11 +41,8 @@ router.post("/google", async (req, res) => {
     }
 
     if (!process.env.GOOGLE_CLIENT_ID) {
-    console.error('🔴 GOOGLE_CLIENT_ID env var is missing!');
-    return res.status(500).json({ message: 'Server misconfiguration: missing GOOGLE_CLIENT_ID' });
-  }
- {
-      return res.status(500).json({ message: "Google Sign-In is not configured on this server" });
+      console.error('🔴 GOOGLE_CLIENT_ID env var is missing!');
+      return res.status(500).json({ message: 'Server misconfiguration: missing GOOGLE_CLIENT_ID' });
     }
 
     // Verify Google ID token
